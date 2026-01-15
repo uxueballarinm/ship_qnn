@@ -1,0 +1,31 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Entornos Virtuales (Virtual Environments) ---
+# Nombres comunes para carpetas de entorno
+env/
+venv/
+.env
+.venv/
+qml-torch-env/
+
+# --- VS Code ---
+.vscode/
+*.code-workspace
+
+# --- Jupyter Notebooks ---
+.ipynb_checkpoints
+
+# --- Datos (Opcional, descomenta si quieres ignorar datos pesados) ---
+# data/
+# *.csv
+# *.h5
+# *.pth
+
+# --- Windows / Mac System Files ---
+Thumbs.db
+.DS_Store
+
+ODDIT/
