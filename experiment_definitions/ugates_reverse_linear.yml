@@ -2,6 +2,7 @@
   select_features: &id001
   - px
   - py
+  data: ODDIT\Undestanding_the_Data\mariner_waypoint_2_ind.csv
   optimizer: cobyla
   encoding: compact
   model: vanilla

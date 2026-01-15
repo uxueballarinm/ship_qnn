@@ -27,5 +27,14 @@ qml-torch-env/
 # --- Windows / Mac System Files ---
 Thumbs.db
 .DS_Store
+figures/
+
+logs/
+.txt
+.csv
+.xlsx
+
+/models
+.pkl
 
 ODDIT/
