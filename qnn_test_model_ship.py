@@ -9,7 +9,7 @@ class Args:
     def __init__(self, **entries):
         self.__dict__.update(entries)
 
-def run_test(cli_args): #TODO: Ordenar y elegir plots
+def run_test(cli_args):
 
     model_path = cli_args.model
     data_path = cli_args.data
@@ -91,26 +91,63 @@ def run_test(cli_args): #TODO: Ordenar y elegir plots
     print("Running Evaluation...")
     results = evaluate_model(args, model, weights, x_test, y_test, x_scaler, y_scaler)
     base_name = os.path.basename(model_path).replace('.pkl', '')
-    
-    # Create Figures Directory
-    if not os.path.exists("figures"):
-        os.makedirs("figures")
-    
-    save_dir = f"figures/{base_name}"
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    if cli_args.version == 'old':
+        # Create Figures Directory
+        if not os.path.exists("figures"):
+            os.makedirs("figures")
         
-    print(f"Saving plots to {save_dir}...")
-    # plot_convergence(args, saved_data, filename=f"{save_dir}/plot_convergence.png")
-    plot_horizon_branches(args, results, filename=f"{save_dir}/plot_branches.png")
-    plot_horizon_euclidean_boxplots(args, results, mode='local', filename=f"{save_dir}/plot_horizon_errors")
-    plot_trajectory_components(args, results, filename=f"{save_dir}/plot_trajectory.png")
-    plot_errors_and_position_time(args, results, filename=f"{save_dir}/plot_error_vs_time")
+        save_dir = f"figures/{base_name}"
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        
+        print(f"Saving plots to {save_dir}...")
+        #plot_convergence(args, saved_data, filename=f"{save_dir}/plot_convergence.png")
+        plot_horizon_branches(args, results, filename=f"{save_dir}/plot_branches_local.png")
+        plot_horizon_euclidean_boxplots(args, results, mode='local', filename=f"{save_dir}/plot_horizon_errors")
+
+        # Global Open Plots
+        plot_trajectory_components(args, results, loop = 'open', filename=f"{save_dir}/plot_trajectory_open.png")
+        plot_errors_and_position_time(args, results, loop = 'open', filename=f"{save_dir}/plot_error_vs_time")
+
+        #Global Closed Plots
+        plot_trajectory_components(args, results, loop = 'closed', filename=f"{save_dir}/plot_trajectory_closed.png")
+        plot_errors_and_position_time(args, results, loop = 'closed', filename=f"{save_dir}/plot_error_vs_time")
+    elif cli_args.version == 'save':
+        print("\n[Info] Saving Test Results to Excel/Logs...")
+        
+        try:
+            parts = base_name.split('_')
+            timestamp = f"{parts[0]}_{parts[1]}"
+            print(f"[Info] Using original timestamp: {timestamp}")
+        except IndexError:
+            # Fallback if filename format is unexpected
+            timestamp = datetime.datetime.now().strftime("%m-%d_%H-%M-%S")
+            print(f"[Warning] Could not extract timestamp. Using current time: {timestamp}")
+        
+        train_results = {
+            "best_weights": saved_data.get('best_weights'),
+            "final_weights": saved_data.get('final_weights'),
+            "train_history": saved_data.get('train_history', []),
+            "val_history": saved_data.get('val_history', [])
+        }
+        
+        # We reuse the training 'best' metrics just to fill the slot, 
+        # as we are only testing one set of weights here.
+        best_eval = {"metrics": saved_data.get('final_eval_metrics', {})}
+        
+        # 'results' contains the metrics for THIS test run (on the new data/fold)
+        final_eval = results 
+        
+        scalers = [x_scaler, y_scaler]
+        qnn_dict = saved_data['qnn_structure']
+        
+        # Call the utility function
+        save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp)
 
     print("Done.")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--version', type=str, choices=['old', 'new'])
+    parser.add_argument('--version', type=str, choices=['old', 'new','save'],default='old', help="Choose 'old' to run test and generate plots, 'new' to load results, 'save' to save test results")
     parser.add_argument('--model', type=str, required=True, help="Path to .pkl")
     parser.add_argument('--data', type=str, default="datasets\zigzag_10_40_ood_reduced_2_s.csv")
     parser.add_argument('--final', action='store_true')
@@ -118,5 +155,5 @@ if __name__ == "__main__":
     parser.add_argument('--save_plot', type=str2bool, default=True, choices=[True, False], help="Save plots to files")
     args = parser.parse_args()
     
-    if args.version == 'old': run_test(args)
+    if args.version in ['old', 'save']:  run_test(args)
     else: load_experiment_results(args.model)

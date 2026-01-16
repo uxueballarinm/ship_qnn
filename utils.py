@@ -491,84 +491,161 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         "nfev": res.nfev if hasattr(res, 'nfev') else len(train_history)
     }
 
-def recursive_forward_pass(args, model, best_params, x_test, y_test, x_scaler, y_scaler):
+def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
     """
-    Performs recursive evaluation (Dead Reckoning).
-    - Predicted features are fed back into the loop.
-    - Non-predicted features (Controls/Sensors) are taken from Ground Truth (x_test).
+    Performs Recursive 'Fan' Prediction.
+    
+    1. At each step 'i', predicts the full Horizon (e.g., 5 steps).
+    2. Stores the FULL Horizon into the output matrix (for analysis).
+    3. Uses ONLY the 1st step prediction to update the window for step 'i+1'.
+    
+    Returns:
+        recursive_preds (N, H, 2): The collection of all horizon predictions made at each step.
+        recursive_ratio (float): Percentage of features driven by the model (0.0 - 1.0).
     """
-
-    num_samples = len(x_test)
-    num_features = len(args.features)
     
-    # Map Targets to Input Features
-    target_to_input_idx = {}
-    skipped_updates = []
-    for t_idx, target_name in enumerate(args.targets):
-
-        # Infer input feature name from target name
-        if args.predict == 'delta':
-            input_name = target_name.replace('delta ', 'Position ') # e.g. delta x -> Position X
-        else:
-            input_name = target_name # e.g. Position X -> Position X
-
-        # Check if this input feature exists in our model
-        if input_name in args.features:
-            feat_idx = args.features.index(input_name)
-            target_to_input_idx[t_idx] = feat_idx # Map output index -> input index
-        else:
-            # Handle missing features (e.g. if we dropped position inputs)
-            skipped_updates.append(input_name)
-
-    if skipped_updates:
-        print(f"  > [Info] Open-Loop Integration for: {skipped_updates} (Feature not in input)")
+    # 1. Setup
+    num_samples = x_test.shape[0] # N
+    horizon = args.horizon        # H
     
-    preds_norm_history = []
-    current_window_norm = x_test[0].copy().reshape(1, args.window_size, num_features)
-    for t in range(num_samples):
+    # Feature Indexing
+    feat_names = args.features 
+    def get_idx(name):
+        return feat_names.index(name) if name in feat_names else None
+
+    idx_px = get_idx('Position X')
+    idx_py = get_idx('Position Y')
+    idx_dx = get_idx('delta x')
+    idx_dy = get_idx('delta y')
+
+    if args.predict == 'pos' and (idx_px is None or idx_py is None):
+        print("  > [Warning] Model is not able to predict absolute positions without including them as features.")
+        print("Use '--predict delta' or include 'px py' in --select_features.")
+
+    # 2. Calculate Recursivity Metrics & Log
+    updated_features = set()
+    updates_log = [] 
+
+    def log_status(target_name, input_idx, mode_str):
+        if input_idx is not None:
+            updated_features.add(input_idx)
+            updates_log.append((target_name, feat_names[input_idx], f"✅ Closed-Loop ({mode_str})"))
+        else:
+            updates_log.append((target_name, "None", f"⚠️ OPEN-LOOP (Input missing)"))
+
+    # Check which features will be updated by the logic below
+    if args.predict == 'delta':
+        log_status('delta x', idx_dx, 'Direct')
+        log_status('delta y', idx_dy, 'Direct')
+        log_status('delta x', idx_px, 'Integration')
+        log_status('delta y', idx_py, 'Integration')
+    else: # predict == 'pos'
+        log_status('Position X', idx_px, 'Direct')
+        log_status('Position Y', idx_py, 'Direct')
+        log_status('Position X', idx_dx, 'Differentiation')
+        log_status('Position Y', idx_dy, 'Differentiation')
+
+    recursive_ratio = len(updated_features) / len(feat_names) if feat_names else 0.0
+
+    # 3. Shortcut for 0% recursivity
+    if len(updated_features) == 0:
+        print("  > [Warning] Fully Open-Loop detected. Skipping recursive simulation (using fast forward pass).")
+        preds_full = model.forward(x_test, best_params)
+        return preds_full, 0.0
+
+    print(f"\n  {'Target Output':<16} | {'Found Input':<16} | {'Recursive Status'}")
+    print(f"  {'-'*16}-+-{'-'*16}-+-{'-'*40}")
+    for tgt, inp, status in updates_log:
+        if inp != "None": 
+             print(f"  {tgt:<16} | {inp:<16} | {status}")
+    print(f"  {'-'*85}")
+    print(f"  > Recursivity Score: {recursive_ratio*100:.1f}% ({len(updated_features)}/{len(feat_names)} features driven by model)\n")
+    
+    # 4. Initialize with the very first window of the test set
+    # shape (1, W, F)
+    curr_window = x_test[0:1, :, :] 
+    
+    # To enforce physics, we need the "real" state of the last timestep in the current window
+    last_step_real = x_scaler.inverse_transform(curr_window[:, -1, :])
+
+    # Output Container: (N, H, 2)
+    # Row 'i' will contain the forecast made at step 'i' for [i+1 ... i+H]
+    recursive_preds = np.zeros((num_samples, horizon, 2))
+    last_px, last_py = 0.0, 0.0
+
+    # 5. Main Loop (Iterate through the entire dataset)
+    for i in range(num_samples):
         
-        # Predict (normalized)
-        pred_norm = model.forward(current_window_norm, best_params) # Shape (1, H, Targets)
-        preds_norm_history.append(pred_norm[0]) 
+        # A. Predict Full Horizon
+        # model.forward returns (1, H, 2). We keep ALL of it.
+        preds_full = model.forward(curr_window, best_params) # Shape (1, H, 2)
+        
+        # Store the full "Fan" of predictions for this step
+        recursive_preds[i] = preds_full[0]
+        
+        # B. Recursion Logic: Extract ONLY the 1st step to drive simulation
+        pred_step = preds_full[:, 0, :] # Shape (1, 2) -> The immediate next step
+        
+        # --- Prepare Window for Next Iteration (i+1) ---
+        
+        # 1. Fetch Ground Truth for Auxiliary Features (Orientation, Velocity)
+        # We need the features for time t = i+1.
+        # Since x_test windows overlap, the LAST row of x_test[i+1] contains the data for t=i+1.
+        # We clamp indices to handle the very last sample.
+        next_gt_idx = min(i + 1, num_samples - 1)
+        next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] # Shape (1, F)
 
-        if t == num_samples - 1: break # If we reached the end, we don't need to prepare the next window
-
-        # Unscale
+        # 2. Denormalize for Physics Calculation
         if y_scaler:
-            pred_real = y_scaler.inverse_transform(pred_norm[0]) # Shape (H, Targets)
+            pred_step_real = y_scaler.inverse_transform(pred_step)
         else:
-            pred_real = pred_norm[0]
-        current_window_real = x_scaler.inverse_transform(current_window_norm[0]) # Shape (Window, Features) #???
-        last_real_state = current_window_real[-1].copy() # The state at timestep t
+            pred_step_real = pred_step
 
-        # Next step from ground truth
-        next_real_state = np.zeros(num_features)
-        gt_next_step_norm = x_test[t+1][-1].reshape(1, -1)
-        gt_next_step_real = x_scaler.inverse_transform(gt_next_step_norm)[0]
-        next_real_state[:] = gt_next_step_real[:] # Default to GT for everything
-
-        # Overwrite with predicted features
-        next_step_pred = pred_real[0]  # Using the first step of the horizon
-        for t_idx, feat_idx in target_to_input_idx.items():
-            if args.predict == 'delta':
-                next_real_state[feat_idx] = last_real_state[feat_idx] + next_step_pred[t_idx] # New Pos = Old Pos + Predicted Delta
-            else:
-                next_real_state[feat_idx] = next_step_pred[t_idx] # New Pos = Predicted Pos
-
-        # Shift and append
-        new_window_real = np.roll(current_window_real, -1, axis=0) # Shift history to the left
-        new_window_real[-1] = next_real_state # Set the newest timestep
+        next_gt_real = x_scaler.inverse_transform(next_gt_features_norm)
         
-        # Rescale for next iteration
-        current_window_norm = x_scaler.transform(new_window_real)
-        current_window_norm = np.clip(current_window_norm, 0, np.pi).reshape(1, args.window_size, num_features)
+        # 3. Create New Row: Start with GT (Aux features), Overwrite Pos/Delta with Preds
+        new_row_real = np.copy(next_gt_real)
+        
+        if args.predict == 'delta':
+            dx, dy = pred_step_real[0, 0], pred_step_real[0, 1]
+            
+            # Overwrite Deltas
+            if idx_dx is not None: new_row_real[0, idx_dx] = dx
+            if idx_dy is not None: new_row_real[0, idx_dy] = dy
+            
+            # Integrate Position (Pos_new = Pos_old_simulated + Delta_pred)
+            if idx_px is not None: new_row_real[0, idx_px] = last_step_real[0, idx_px] + dx
+            if idx_py is not None: new_row_real[0, idx_py] = last_step_real[0, idx_py] + dy
+            
+        else: 
+            px, py = pred_step_real[0, 0], pred_step_real[0, 1]
+            
+            # Overwrite Positions
+            if idx_px is not None: new_row_real[0, idx_px] = px
+            if idx_py is not None: new_row_real[0, idx_py] = py
+            
+            # Differentiate Deltas (Delta_new = Pos_pred - Pos_old_simulated)
+            if idx_dx is not None: 
+                new_row_real[0, idx_dx] = px - last_px #last_step_real[0, idx_px]
+                last_px = px
+            if idx_dy is not None: 
+                new_row_real[0, idx_dy] = py - last_py #last_step_real[0, idx_py]
+                last_py = py
 
-    return np.array(preds_norm_history)
+        # 4. Update 'last_step_real' for the next iteration
+        last_step_real = new_row_real
+
+        # 5. Normalize and Shift Window
+        new_row_norm = x_scaler.transform(new_row_real)
+        
+        # Drop first timestep, Append new simulated timestep
+        curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
+
+    return recursive_preds, recursive_ratio
 
 def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     """
     Runs BOTH One-Step (Teacher Forcing) and Recursive (Dead Reckoning) evaluations.
-    Returns a concise dictionary of the most significant metrics.
     """
 
     results = {}
@@ -579,33 +656,44 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     
     # Unscale
     if y_scaler:
-        # We reshape to (-1, F) for the scaler, then IMMEDIATELY back to (N, H, F)
         preds_real_step = y_scaler.inverse_transform(preds_norm_step.reshape(-1, orig_shape[-1])).reshape(orig_shape)
         y_gt_real = y_scaler.inverse_transform(y_test.reshape(-1, orig_shape[-1])).reshape(orig_shape)
     else:
         preds_real_step = preds_norm_step
         y_gt_real = y_test
 
-    # Step metrics (Flatten for MSE/R2 calculation)
+    # Step metrics
     results['Step_MSE'] = mean_squared_error(y_gt_real.reshape(-1, orig_shape[-1]), preds_real_step.reshape(-1, orig_shape[-1]))
     results['Step_R2'] = r2_score(y_gt_real.reshape(-1, orig_shape[-1]), preds_real_step.reshape(-1, orig_shape[-1]))
 
     if args.predict == 'delta':
         true_path_backbone = np.concatenate([np.zeros((1, 2)), np.cumsum(y_gt_real[:, 0, :], axis=0)])
-        true_path = true_path_backbone[:-1, None, :] + np.cumsum(y_gt_real, axis=1) # True Path (true pos + true local shape)
-        pred_path_local = true_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1) # Local Prediction (true pos + pred local shape)
+        true_path = true_path_backbone[:-1, None, :] + np.cumsum(y_gt_real, axis=1)
+        pred_path_local = true_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1)
+        pred_path_backbone = np.concatenate([np.zeros((1, 2)), np.cumsum(preds_real_step[:, 0, :], axis=0)])
+        pred_path_global_open = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1)
     else:
         true_path_backbone = y_gt_real[:, 0, :]
-        true_path = y_gt_real # (N, H, 2)
-        pred_path_local = preds_real_step # (N, H, 2)
+        true_path = y_gt_real
+        pred_path_local = preds_real_step
 
-    # Locally reconstructed trajectory metrics
+        pred_path_backbone = preds_real_step[:, 0, :]
+        pred_path_global_open = preds_real_step
+
     results['Local_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_local.reshape(-1, 2))
-    norm_local_error = np.linalg.norm(true_path - pred_path_local, axis=2) # Euclidean error (N, H)
+    norm_local_error = np.linalg.norm(true_path - pred_path_local, axis=2)
     results['Local_ADE'] = np.mean(norm_local_error)
 
-    # RECURSIVE EVALUATION
-    preds_norm_rec = recursive_forward_pass(args, model, params, x_test, y_test, x_scaler, y_scaler)
+    results['Global_open_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_global_open.reshape(-1, 2))
+    results['Global_open_R2'] = r2_score(true_path.reshape(-1, 2), pred_path_global_open.reshape(-1, 2))
+    norm_global_error = np.linalg.norm(true_path - pred_path_global_open, axis=2)
+    results['Global_open_ADE'] = np.mean(norm_global_error)    
+    results['Global_open_FDE'] = norm_global_error[-1,-1]      
+    results['Global_open_Max'] = np.max(norm_global_error)   
+
+    # RECURSIVE EVALUATION (Updated Unpacking)
+    preds_norm_rec, rec_ratio = recursive_forward_pass(args, model, params, x_test, x_scaler, y_scaler)
+    results['Recursivity'] = rec_ratio  # <--- Store Metric
     
     # Unscale
     if y_scaler:
@@ -615,30 +703,36 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     
     if args.predict == 'delta':
         pred_path_backbone = np.concatenate([np.zeros((1, 2)), np.cumsum(preds_real_rec[:, 0, :], axis=0)])
-        pred_path_global = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_rec, axis=1) # Global Prediction (pred pos + pred local shape)
+        pred_path_global = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_rec, axis=1)
     else:
         pred_path_backbone = preds_real_rec[:, 0, :]
         pred_path_global = preds_real_rec
         
-    # Recursively reconstructed trajectory metrics
-    results['Global_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_global.reshape(-1, 2))
-    results['Global_R2'] = r2_score(true_path.reshape(-1, 2), pred_path_global.reshape(-1, 2))
-    norm_global_error = np.linalg.norm(true_path - pred_path_global, axis=2) # Euclidean error (N, H)
-    results['Global_ADE'] = np.mean(norm_global_error)    # Average Displacement Error (Avg Drift)
-    results['Global_FDE'] = norm_global_error[-1,-1]      # Final Displacement Error (End Drift)
-    results['Global_Max'] = np.max(norm_global_error)     # Worst case drift
+    results['Global_closed_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_global.reshape(-1, 2))
+    results['Global_closed_R2'] = r2_score(true_path.reshape(-1, 2), pred_path_global.reshape(-1, 2))
+    norm_global_error = np.linalg.norm(true_path - pred_path_global, axis=2)
+    results['Global_closed_ADE'] = np.mean(norm_global_error)    
+    results['Global_closed_FDE'] = norm_global_error[-1,-1]      
+    results['Global_closed_Max'] = np.max(norm_global_error) 
 
     return {
         "true_deltas_denorm": y_gt_real,
-        "true_backbone": true_path_backbone, # true_path_backbone = np.concatenate([np.zeros((1, 2)), true_path[:, 0, :]])
+        "true_backbone": true_path_backbone,
         "true_path": true_path,
         "local":{              
             "pred_deltas_denorm": preds_real_step,
             "pred_path": pred_path_local,         
         },
         "global":{
-            "pred_deltas_denorm": preds_real_rec,
-            "pred_path": pred_path_global,   
+            "closed":{
+                "pred_deltas_denorm": preds_real_rec,
+                "pred_path": pred_path_global,
+            },
+            "open":{
+                "pred_deltas_denorm": preds_real_step,
+                "pred_path": pred_path_global_open,
+            }
+               
         },
         "metrics": results
     }
@@ -832,12 +926,20 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     metrics_flat = {
         "step MSE": m_final.get('Step_MSE'),
         "step R2": m_final.get('Step_R2'),
+
         "local MSE": m_final.get('Local_MSE'),
         "local ADE": m_final.get('Local_ADE'),
-        "global MSE": m_final.get('Global_MSE'),
-        "global R2": m_final.get('Global_R2'),
-        "global ADE": m_final.get('Global_ADE'),
-        "global FDE": m_final.get('Global_FDE'),
+
+        "global open MSE": m_final.get('Global_open_MSE'),
+        "global open R2": m_final.get('Global_open_R2'),
+        "global open ADE": m_final.get('Global_open_ADE'),
+        "global open FDE": m_final.get('Global_open_FDE'),
+        "global closed MSE": m_final.get('Global_closed_MSE'),
+        "global closed R2": m_final.get('Global_closed_R2'),
+        "global closed ADE": m_final.get('Global_closed_ADE'),
+        "global closed FDE": m_final.get('Global_closed_FDE'),
+
+        "recursivity": m_final.get('Recursivity'),
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "total params": total_params,
         "q params": num_q_params,
@@ -869,8 +971,9 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         # 7. Key Metrics
         "step MSE", "step R2",
         "local MSE", "local ADE",
-        "global MSE", "global ADE", "global FDE", "global R2",
-        
+        "global open MSE", "global open ADE", "global open FDE", "global open R2", 
+        "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
+
     ]
 
     # Construct the final ordered dictionary
@@ -910,7 +1013,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         f"[{timestamp}] "
         f"{args.model:<10} | "
         f"F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | "
-        f"Circuit: {encd:<10} {ansatz:<8} {ent:<14} reps={reps:<2} | "
+        f"Circuit: {encd:<10} {ansatz:<15} {ent:<14} reps={reps:<2} | "
         f"Features: {short_feats} \n"
     )
     
@@ -988,12 +1091,20 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
     metrics_flat = {
         "step MSE": m_final.get('Step_MSE'),
         "step R2": m_final.get('Step_R2'),
+
         "local MSE": m_final.get('Local_MSE'),
         "local ADE": m_final.get('Local_ADE'),
-        "global MSE": m_final.get('Global_MSE'),
-        "global R2": m_final.get('Global_R2'),
-        "global ADE": m_final.get('Global_ADE'),
-        "global FDE": m_final.get('Global_FDE'),
+
+        "global open MSE": m_final.get('Global_open_MSE'),
+        "global open R2": m_final.get('Global_open_R2'),
+        "global open ADE": m_final.get('Global_open_ADE'),
+        "global open FDE": m_final.get('Global_open_FDE'),
+        "global closed MSE": m_final.get('Global_closed_MSE'),
+        "global closed R2": m_final.get('Global_closed_R2'),
+        "global closed ADE": m_final.get('Global_closed_ADE'),
+        "global closed FDE": m_final.get('Global_closed_FDE'),
+
+
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "total params": total_params,
         "iterations": len(train_results['train_history']),
@@ -1025,7 +1136,8 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         # 6. Key Metrics
         "step MSE", "step R2",
         "local MSE", "local ADE",
-        "global MSE", "global ADE", "global FDE", "global R2",
+        "global open MSE", "global open ADE", "global open FDE", "global open R2", 
+        "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
     ]
     # Construct the final ordered dictionary
     ordered_row = {}
@@ -1061,7 +1173,7 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         f"[{timestamp}] "
         f"{'classical':<10} | "
         f"F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | "
-        f"Hidden Size: {hidden:<35} | " # Padding ~48 chars to match the QNN 'Circuit' block width
+        f"Hidden Size: {hidden:<45} | " # Padding ~48 chars to match the QNN 'Circuit' block width
         f"Features: {short_feats} \n"
     )
     with open(log_filename, "a") as f:
@@ -1140,6 +1252,16 @@ def load_experiment_results(filepath):
             val = str(val)
             
         print(f"{k:<15}: {val}")
+    
+    print("\n--- Training Stats ---")
+    train_hist = data.get('train_history', [])
+    print(f"Total Iterations : {len(train_hist)}")
+    if train_hist:
+        print(f"Final Train Loss : {train_hist[-1]:.6f}")
+    # Check for validation history
+    val_hist = data.get('val_history', [])
+    if val_hist:
+        print(f"Final Val Loss   : {val_hist[-1]:.6f}")
             
     print("\n--- Performance Comparison (Best vs. Final Weights) ---")
     print(f"{'METRIC':<25} | {'BEST WEIGHTS':<18} | {'FINAL WEIGHTS':<18}")
@@ -1169,12 +1291,20 @@ def load_experiment_results(filepath):
         print(f"{'Local Traj MSE':<25} | {get_fmt(m_best, 'Local_MSE'):<18} | {get_fmt(m_final, 'Local_MSE'):<18}")
         print(f"{'Local ADE (m)':<25} | {get_fmt(m_best, 'Local_ADE'):<18} | {get_fmt(m_final, 'Local_ADE'):<18}")
 
-        # --- 3. Global Trajectory Metrics ---
+        # --- 3. Global Trajectory Metrics Open ---
         print("-" * 85)
-        print(f"{'Global Traj MSE':<25} | {get_fmt(m_best, 'Global_MSE'):<18} | {get_fmt(m_final, 'Global_MSE'):<18}")
-        print(f"{'Global ADE (m)':<25} | {get_fmt(m_best, 'Global_ADE'):<18} | {get_fmt(m_final, 'Global_ADE'):<18}")
-        print(f"{'Global FDE (m)':<25} | {get_fmt(m_best, 'Global_FDE'):<18} | {get_fmt(m_final, 'Global_FDE'):<18}")
-        print(f"{'Global R2 Score':<25} | {get_fmt(m_best, 'Global_R2'):<18} | {get_fmt(m_final, 'Global_R2'):<18}")
+        print(f"{'Global Open Traj MSE':<25} | {get_fmt(m_best, 'Global_open_MSE'):<18} | {get_fmt(m_final, 'Global_open_MSE'):<18}")
+        print(f"{'Global Open ADE (m)':<25} | {get_fmt(m_best, 'Global_open_ADE'):<18} | {get_fmt(m_final, 'Global_open_ADE'):<18}")
+        print(f"{'Global Open FDE (m)':<25} | {get_fmt(m_best, 'Global_open_FDE'):<18} | {get_fmt(m_final, 'Global_open_FDE'):<18}")
+        print(f"{'Global Open R2 Score':<25} | {get_fmt(m_best, 'Global_open_R2'):<18} | {get_fmt(m_final, 'Global_open_R2'):<18}")
+
+        # --- 4. Global Trajectory Metrics Closed ---
+        print("-" * 85)
+        print(f"{'Global Closed Traj MSE':<25} | {get_fmt(m_best, 'Global_closed_MSE'):<18} | {get_fmt(m_final, 'Global_closed_MSE'):<18}")
+        print(f"{'Global Closed ADE (m)':<25} | {get_fmt(m_best, 'Global_closed_ADE'):<18} | {get_fmt(m_final, 'Global_closed_ADE'):<18}")
+        print(f"{'Global Closed FDE (m)':<25} | {get_fmt(m_best, 'Global_closed_FDE'):<18} | {get_fmt(m_final, 'Global_closed_FDE'):<18}")
+        print(f"{'Global Closed R2 Score':<25} | {get_fmt(m_best, 'Global_closed_R2'):<18} | {get_fmt(m_final, 'Global_closed_R2'):<18}")
+
 
     else:
         print("Metric data missing in file.")
@@ -1192,6 +1322,9 @@ def load_experiment_results(filepath):
     print("="*85 + "\n")
     
     return data
+
+
+
 # --- GLOBAL STYLE CONFIGURATION ---
 plt.rcParams.update({
     "font.family": "serif",

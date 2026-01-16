@@ -111,12 +111,18 @@ def run(args):
     print("...with final weights")
     final_eval = evaluate_model(args, model, results['final_weights'], x_test, y_test, x_scaler, y_scaler)
 
+    
     # Local plots
-    plot_horizon_branches(args, final_eval, filename=f"{fig_dir}/plot_branches.png")
+    plot_horizon_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
     plot_horizon_euclidean_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
-    #Globa Plots
-    plot_trajectory_components(args, final_eval, filename=f"{fig_dir}/plot_trajectory.png")
-    plot_errors_and_position_time(args, final_eval, filename=f"{fig_dir}/plot_error_vs_time")
+
+    # Global Open Plots
+    plot_trajectory_components(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_trajectory_open.png")
+    plot_errors_and_position_time(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_error_vs_time")
+
+    #Global Closed Plots
+    plot_trajectory_components(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_trajectory_closed.png")
+    plot_errors_and_position_time(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_error_vs_time")
     
     scalers = [x_scaler, y_scaler]
     qnn_dict = {"qc": qc, "input_params": input_params, "weight_params": weight_params}
