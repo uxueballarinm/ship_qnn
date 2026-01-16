@@ -9,8 +9,7 @@ import itertools
 # A. FIXED PARAMS:
 # These values are identical for EVERY experiment in EVERY file.
 FIXED_PARAMS = {
-    "maxiter": 5000,                  
-    "select_features": ["dx", "dy"],  
+    "maxiter": 5000,                    
     "optimizer": "cobyla",
     "encoding": "compact",
     "model": "vanilla",
@@ -25,19 +24,19 @@ FIXED_PARAMS = {
 # A separate YAML file will be created for every combination of these.
 # The filename will be generated from these values (e.g., "ugates_circular.yml").
 SPLIT_BY_FILE = {
-    "ansatz": ["ugates"],
-    "entangle": ["reverse_linear"]
+    "entangle": ["full", "linear", "reverse_linear", "circular"]
 }
 
 # C. VARY WITHIN FILE:
 # These variations will be listed INSIDE each YAML file.
 # e.g., one file will contain experiments for reps=1, reps=3, reps=5.
 VARY_WITHIN_FILE = {
-    "reps": [1],
-    "run": list(range(10)) # You can easily add more runs here, e.g. [0, 1, 2]
+    "select_features": [["dx", "dy", "wv"], ["dx", "dy", "sv"], ["dx", "dy", "yr"], ["dx", "dy", "ya"], ["dx", "dy", "vu"],["dx", "dy","radeg"],["dx", "dy","rarad"],["dx", "dy","OOD"]],
+    "reps": [1, 3, 5],
+    "ansatz": ["realamplitudes", "efficientsu2", "ugates"]
 }
 
-OUTPUT_DIR = "experiment_definitions/qnn_circuit_search"
+OUTPUT_DIR = "experiment_definitions/reverse_ablation"
 
 # ==========================================
 # 2. GENERATOR LOGIC (Do not edit below)
