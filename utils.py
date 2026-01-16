@@ -64,6 +64,7 @@ def map_features(feature_list, reverse=False):
         "yr":"Yaw Rate", "ya":"Yaw Angle",
         "vu": "Speed U", "radeg": "Rudder Angle (deg)",
         "rarad": "Rudder Angle (rad)", "OOD": "OOD Label",
+        "dx": "delta x", "dy": "delta y"
     }
 
     if reverse: # (Name -> Code)
