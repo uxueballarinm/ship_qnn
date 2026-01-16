@@ -1,8 +1,7 @@
-- maxiter: 1000
+- maxiter: 5000
   select_features: &id001
   - dx
   - dy
-  data: ODDIT\Undestanding_the_Data\mariner_waypoint_2_ind.csv
   optimizer: cobyla
   encoding: compact
   model: vanilla
