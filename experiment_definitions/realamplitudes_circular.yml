@@ -1,18 +1,31 @@
-- maxiter: 1000
+- maxiter: 5000
   select_features: &id001
-  - px
-  - py
-  data: ODDIT\Undestanding_the_Data\mariner_waypoint_2_ind.csv
+  - dx
+  - dy
   optimizer: cobyla
   encoding: compact
   model: vanilla
   predict: delta
   window_size: 5
-  horizon: 3
+  horizon: 5
   reconstruct_val: false
   save_plot: true
-  ansatz: ugates
-  entangle: reverse_linear
+  ansatz: realamplitudes
+  entangle: circular
+  reps: 1
+  run: 0
+- maxiter: 5000
+  select_features: *id001
+  optimizer: cobyla
+  encoding: compact
+  model: vanilla
+  predict: delta
+  window_size: 5
+  horizon: 5
+  reconstruct_val: false
+  save_plot: true
+  ansatz: realamplitudes
+  entangle: circular
   reps: 3
   run: 0
 - maxiter: 5000
@@ -25,21 +38,7 @@
   horizon: 5
   reconstruct_val: false
   save_plot: true
-  ansatz: ugates
-  entangle: reverse_linear
-  reps: 3
-  run: 0
-- maxiter: 5000
-  select_features: *id001
-  optimizer: cobyla
-  encoding: compact
-  model: vanilla
-  predict: delta
-  window_size: 5
-  horizon: 5
-  reconstruct_val: false
-  save_plot: true
-  ansatz: ugates
-  entangle: reverse_linear
+  ansatz: realamplitudes
+  entangle: circular
   reps: 5
   run: 0
