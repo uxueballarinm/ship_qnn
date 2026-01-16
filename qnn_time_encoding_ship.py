@@ -26,9 +26,9 @@ def run(args):
     select_list = getattr(args, 'select_features', None)
     drop_list = getattr(args, 'drop_features', None)
     if select_list:
-        args.features = map_features(args.select_features)
+        args.features = map_names(args.select_features)
     elif drop_list:
-        args.features = [f for f in full_feature_set if f not in map_features(args.drop_features)]
+        args.features = [f for f in full_feature_set if f not in map_names(args.drop_features)]
     else:
         args.features = full_feature_set
 
@@ -96,7 +96,8 @@ def run(args):
     results = train_model(args, model, x_train, y_train, x_val, y_val, y_scaler)
 
     # Plot Convergence with Dual Axes
-    fig_dir = f"figures/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}"
+    short_args = map_names([args.ansatz, args.entangle], reverse=True)
+    fig_dir = f"figures/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}"
     os.makedirs(fig_dir, exist_ok=True)
     plot_convergence(args, results, filename=f"{fig_dir}/plot_convergence.png")
 
@@ -127,7 +128,7 @@ def run(args):
     scalers = [x_scaler, y_scaler]
     qnn_dict = {"qc": qc, "input_params": input_params, "weight_params": weight_params}
     save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
-    load_experiment_results(f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl")
+    load_experiment_results(f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}.pkl")
 
 if __name__=="__main__":
 

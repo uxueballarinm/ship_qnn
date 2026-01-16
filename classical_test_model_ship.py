@@ -62,7 +62,7 @@ def run_test_classical(cli_args):
     df['delta_y'] = df['position_y'].diff().fillna(0)
 
     # Feature Mapping (Robustness)
-    cols = map_features(args.features)
+    cols = map_names(args.features)
     pred_cols = ["delta_x", "delta_y"] if args.predict == "delta" else ["position_x", "position_y"]
     
     # Extract and Scale

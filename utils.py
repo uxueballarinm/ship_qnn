@@ -49,7 +49,7 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-def map_features(feature_list, reverse=False):
+def map_names(feature_list, reverse=False):
     """
     Maps between short codes (e.g., 'px') and full feature names (e.g., 'Position X').
     Args:
@@ -864,7 +864,8 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     num_c_params = total_params - num_q_params
 
     # Save model in pickle file
-    model_filename = f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl"
+    short_args = map_names([args.ansatz, args.entangle], reverse=True)
+    model_filename = f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}.pkl"
     save_payload = {
         "config": vars(args),
         "best_weights": train_results['best_weights'],
@@ -918,7 +919,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         if key not in ignore_keys:
             if key in ['features', 'targets']:
                 # Convert full names to short codes before saving
-                short_list = map_features(value, reverse=True)
+                short_list = map_names(value, reverse=True)
                 raw_data[key] = clean_val(short_list)
             else:
                 raw_data[key] = clean_val(value)
@@ -1004,7 +1005,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
 
     # Text log
     log_filename = "logs/experiment_log.txt"
-    short_feats = ", ".join(map_features(args.features, reverse=True))
+    short_feats = ", ".join(map_names(args.features, reverse=True))
     encd = getattr(args, 'encoding', 'N/A')
     ansatz = getattr(args, 'ansatz', 'N/A')
     ent = getattr(args, 'entangle', 'N/A')
@@ -1084,7 +1085,7 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
     for key, value in vars(args).items():
         if key not in ignore_keys:
             if key in ['features', 'targets']:
-                short_list = map_features(value, reverse=True)
+                short_list = map_names(value, reverse=True)
                 raw_data[key] = clean_val(short_list)
             else:
                 raw_data[key] = clean_val(value)
@@ -1167,7 +1168,7 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
 
     # 4. Text Log
     log_filename = "logs/experiment_log.txt"
-    short_feats = ", ".join(map_features(args.features, reverse=True))
+    short_feats = ", ".join(map_names(args.features, reverse=True))
     hidden = getattr(args, 'hidden_size', 'N/A')
     
     log_entry = (

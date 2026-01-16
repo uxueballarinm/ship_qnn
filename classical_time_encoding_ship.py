@@ -24,9 +24,9 @@ def run_classical(args):
     select_list = getattr(args, 'select_features', None)
     drop_list = getattr(args, 'drop_features', None)
     if select_list:
-        args.features = map_features(args.select_features)
+        args.features = map_names(args.select_features)
     elif drop_list:
-        args.features = [f for f in full_feature_set if f not in map_features(args.drop_features)]
+        args.features = [f for f in full_feature_set if f not in map_names(args.drop_features)]
     else:
         args.features = full_feature_set
 
