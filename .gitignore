@@ -1,7 +1,12 @@
 # --- Python ---
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.ipynb_checkpoints
 
 # --- Entornos Virtuales (Virtual Environments) ---
 # Nombres comunes para carpetas de entorno
