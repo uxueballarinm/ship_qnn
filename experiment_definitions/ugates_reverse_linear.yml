@@ -1,7 +1,7 @@
 - maxiter: 1000
   select_features: &id001
-  - px
-  - py
+  - dx
+  - dy
   data: ODDIT\Undestanding_the_Data\mariner_waypoint_2_ind.csv
   optimizer: cobyla
   encoding: compact
@@ -13,7 +13,7 @@
   save_plot: true
   ansatz: ugates
   entangle: reverse_linear
-  reps: 3
+  reps: 1
   run: 0
 - maxiter: 5000
   select_features: *id001
