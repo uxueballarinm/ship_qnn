@@ -1493,13 +1493,13 @@ def plot_horizon_branches(args, data, step_interval=20, filename=None):
 # ==========================================
 # PLOT 2: GLOBAL DRIFT (Trajectory)
 # ==========================================
-def plot_trajectory_components(args, data, horizons=[1,5], filename=None):
+def plot_trajectory_components(args, data, loop='closed', horizons=[1,5], filename=None):
     if not isinstance(horizons, list): horizons = [horizons]
     horizons = [k-1 for k in horizons] 
 
     true_path = data['true_backbone'] 
     time_steps = np.arange(len(true_path))
-    pred_path = data['global']['pred_path']
+    pred_path = data['global'][loop]['pred_path']
 
     fig = plt.figure(figsize=(12, 9))
     gs = gridspec.GridSpec(2, 2)
@@ -1554,7 +1554,8 @@ def plot_trajectory_components(args, data, horizons=[1,5], filename=None):
 
     ax1.legend(prop=legend_prop)
     
-    fig.suptitle("Global Drift Analysis (Recursive)", y=0.96, **title_style)
+    if loop == 'closed':fig.suptitle("Global Drift Analysis (Closed-Loop)", y=0.96, **title_style)
+    else: fig.suptitle("Global Drift Analysis (Open-Loop)", y=0.96, **title_style)
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     for ax in [ax1, ax2, ax3]: _force_ticks_font(ax)
     
@@ -1566,9 +1567,10 @@ def plot_trajectory_components(args, data, horizons=[1,5], filename=None):
 # ==========================================
 # PLOT 3: ERROR ANALYSIS
 # ==========================================
-def plot_errors_and_position_time(args, data, mode='global', horizon_mode='mean', filename=None):
+def plot_errors_and_position_time(args, data, mode='global', loop='closed', horizon_mode='mean', filename=None):
     if mode not in data: return
-    pred_obj = data[mode]
+    if mode == 'local': pred_obj = data[mode]
+    else: pred_obj = data[mode][loop]
     pred_deltas_all_h = pred_obj['pred_deltas_denorm']
     true_deltas_all_h = data['true_deltas_denorm']
     pred_path_all_h = pred_obj['pred_path'] 
@@ -1632,7 +1634,7 @@ def plot_errors_and_position_time(args, data, mode='global', horizon_mode='mean'
     
     horizon_str = ", ".join([t[0] for t in tasks])
 
-    ax_top_left.set_title(f"Error Analysis ({mode.capitalize()} - {horizon_str})", pad=20, **title_style)
+    ax_top_left.set_title(f"Error Analysis ({mode.capitalize()} - {loop} - {horizon_str})", pad=20, **title_style)
     ax_top_left.set_xlim(0, num_points)
     ax_top_left.set_ylim(bottom=0); ax_top_right.set_ylim(bottom=0)
 
@@ -1664,7 +1666,8 @@ def plot_errors_and_position_time(args, data, mode='global', horizon_mode='mean'
         h_str = horizon_mode[0]
 
     if args.save_plot:
-        save_path = filename + f"_{mode}_{h_str}.png"
+        if mode == 'local': save_path = filename + f"_{mode}_{h_str}.png"
+        else: save_path = filename + f"_{mode}_{loop}_{h_str}.png"
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()
@@ -1672,9 +1675,10 @@ def plot_errors_and_position_time(args, data, mode='global', horizon_mode='mean'
 # ==========================================
 # PLOT 4: BOXPLOTS
 # ==========================================
-def plot_horizon_euclidean_boxplots(args, data, mode='global', filename=None):
+def plot_horizon_euclidean_boxplots(args, data, mode='global', loop='closed', filename=None):
     if mode not in data: return
-    pred_obj = data[mode]
+    if mode == 'local': pred_obj = data[mode]
+    else: pred_obj = data[mode][loop]
     pred_deltas = pred_obj['pred_deltas_denorm']
     true_deltas = data['true_deltas_denorm']
     
@@ -1703,7 +1707,8 @@ def plot_horizon_euclidean_boxplots(args, data, mode='global', filename=None):
 
     x_pos = np.arange(1, horizon_steps + 1)
     ax.plot(x_pos, step_means, marker='D', color='#D62728', linestyle='None', markersize=8, label='Average Error')
-    ax.set_title(f"Step Error Distribution (Euclidean) - {mode.capitalize()}", pad=20, **title_style)
+    if mode == 'local': ax.set_title(f"Step Error Distribution (Euclidean) - {mode.capitalize()}", pad=20, **title_style)
+    else: ax.set_title(f"Step Error Distribution (Euclidean) - {mode.capitalize()} - {loop}", pad=20, **title_style)
     ax.set_xlabel(r"$\mathit{Horizon\ Step}$", **label_style)
     ax.set_ylabel(r"$\mathit{Step\ Error}$ [m]", **label_style)
     ax.set_xticklabels([str(i) for i in x_pos])
@@ -1717,7 +1722,8 @@ def plot_horizon_euclidean_boxplots(args, data, mode='global', filename=None):
     _force_ticks_font(ax)
 
     if args.save_plot:
-        save_path = filename + f"_{mode}.png"
+        if mode == 'local': save_path = filename + f"_{mode}.png"
+        else: save_path = filename + f"_{mode}_{loop}.png"
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
 
     if args.show_plot: plt.show()
