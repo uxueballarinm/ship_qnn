@@ -185,6 +185,3 @@ if __name__=="__main__":
     parser.add_argument('--run', type=int, default=0)
     args = parser.parse_args()
     run(args)
-
-    #NOTE: Add two metrics in validation
-    # - 
