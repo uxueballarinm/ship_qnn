@@ -17,9 +17,22 @@ def run_classical(args):
     args.data_dt = float(f"{dt_avg:.4f}")
     print(f"\nDataset: N = {args.data_n} | dt = {args.data_dt} s")
 
-    df['delta x'] = df['Position X'].diff().fillna(0)
-    df['delta y'] = df['Position Y'].diff().fillna(0)
+    df['delta Surge Velocity'] = df['Surge Velocity'].diff().fillna(0)
+    df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
+    df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
+    df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
 
+    control_cols = ["Rudder Angle (deg)", "Rudder Angle (rad)"] # Add whatever names you use
+    
+    for col in control_cols:
+        if col in df.columns:
+            # Shift (-1 means move next row's value to current row)
+            df[col] = df[col].shift(-1) 
+            print(f"Shifted feature '{col}' by -1 step (Predicting t using Action t)")
+
+    # 3. Drop the last row (which is now NaN because of the shift)
+    df.dropna(inplace=True)
+    
     # Feature selection
     select_list = getattr(args, 'select_features', None)
     drop_list = getattr(args, 'drop_features', None)
@@ -33,7 +46,7 @@ def run_classical(args):
     print(f"{len(args.features)} features selected: {args.features}")
 
     # Feature Map
-    args.targets = ["delta x", "delta y"] if args.predict == "delta" else ["Position X", "Position Y"]
+    args.targets = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"] if args.predict == "delta" else ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
     
     print(f"Features: {args.features}")
     feature_seqs, prediction_seqs = get_seqs(df, args.features, args.targets)
@@ -81,7 +94,7 @@ def run_classical(args):
     # If Horizon > 1, we need to flatten targets or adjust model output.
     # For simplicity, let's flatten targets for training: (N, Horizon*2)
     y_train_flat = y_train.reshape(y_train.shape[0], -1)
-    y_val_flat = y_val.reshape(y_val.shape[0], -1)
+    # y_val_flat = y_val.reshape(y_val.shape[0], -1)
     
     model = ClassicalLSTM(
         input_size=input_dim,
@@ -93,7 +106,7 @@ def run_classical(args):
     num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"\nTotal Trainable Parameters: {num_params}")
     # --- TRAINING ---
-    results = train_classical_model(args, model, x_train, y_train_flat, x_val, y_val_flat, y_scaler=y_scaler,device=device)
+    results = train_classical_model(args, model, x_train, y_train_flat, x_val, y_val, y_scaler=y_scaler,device=device)
 
     # --- EVALUATION ---
     # We need to wrap the evaluation because 'evaluate_model' expects a QNN-style 'model.forward(x, params)' interface.
@@ -101,7 +114,7 @@ def run_classical(args):
     
 
 
-    wrapper = ClassicalWrapper(model, device)
+    wrapper = ClassicalWrapper(model, device,output_shape=y_train.shape)
 
     # Save directories
     fig_dir = f"figures/{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}"
@@ -117,12 +130,16 @@ def run_classical(args):
     final_eval = evaluate_model(args, wrapper, results['final_weights'], x_test, y_test, x_scaler, y_scaler)
 
     # Local plots
-    plot_horizon_branches(args, final_eval, filename=f"{fig_dir}/plot_branches.png")
-    plot_horizon_euclidean_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
-    #Global Plots
-    plot_trajectory_components(args, final_eval, filename=f"{fig_dir}/plot_trajectory.png")
-    plot_errors_and_position_time(args, final_eval, filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
+    plot_kinematics_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
 
+    # Global Open Plots
+    plot_kinematics_time_series(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_trajectory_open.png")
+    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_error_vs_time")
+
+    #Global Closed Plots
+    plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_trajectory_closed.png")
+    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_error_vs_time")
     scalers = [x_scaler, y_scaler]
     save_classical_results(args, results, best_eval, final_eval, scalers=scalers, timestamp=timestamp)
     load_experiment_results(f"models/{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl")
@@ -139,7 +156,7 @@ if __name__ == '__main__':
     parser.add_argument('-ws', '--window_size', type=int, default=5)
     parser.add_argument('-y', '--horizon', type=int, default=5) # FIXED: Was 1, now 5
     parser.add_argument('-t', '--testing_fold', type=int, default=3)
-    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'pos'])
+    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'motion'])
     parser.add_argument('--norm', type=str2bool, default=True, choices=[True, False])
     
     # Classical Model Hyperparameters

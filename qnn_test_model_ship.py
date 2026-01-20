@@ -46,12 +46,14 @@ def run_test(cli_args):
     # 4. PREPARE TEST DATA
     # We still need to load the CSV to get the actual test values
     df = pd.read_csv(data_path, index_col=0)
-    df['delta x'] = df['Position X'].diff().fillna(0)
-    df['delta y'] = df['Position Y'].diff().fillna(0)
-
+    
+    df['delta Surge Velocity'] = df['Surge Velocity'].diff().fillna(0)
+    df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
+    df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
+    df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
     # Reconstruct column lists based on config string
     cols = args.features
-    pred_cols = ["delta x", "delta y"] if args.predict == "delta" else ["Position X", "Position Y"]
+    pred_cols = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"] if args.predict == "delta" else ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
     
     # Extract and Scale
     feature_seqs = df[cols].to_numpy()
@@ -83,8 +85,8 @@ def run_test(cli_args):
         pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=args.run),
         default_precision=0.0
     )
-    
-    dummy_shape = (10, args.horizon, 2)
+        
+    dummy_shape = (y_test.shape[0], args.horizon, y_test.shape[-1]) 
     model = WindowEncodingQNN(estimator_qnn, dummy_shape, args.run)
 
     # 6. EVALUATE & PLOT
@@ -102,16 +104,16 @@ def run_test(cli_args):
         
         print(f"Saving plots to {save_dir}...")
         #plot_convergence(args, saved_data, filename=f"{save_dir}/plot_convergence.png")
-        plot_horizon_branches(args, results, filename=f"{save_dir}/plot_branches_local.png")
-        plot_horizon_euclidean_boxplots(args, results, mode='local', filename=f"{save_dir}/plot_horizon_errors")
+        plot_kinematics_branches(args, results, filename=f"{save_dir}/plot_branches_local.png")
+        plot_kinematics_boxplots(args, results, mode='local', filename=f"{save_dir}/plot_horizon_errors")
 
         # Global Open Plots
-        plot_trajectory_components(args, results, loop = 'open', filename=f"{save_dir}/plot_trajectory_open.png")
-        plot_errors_and_position_time(args, results, loop = 'open', filename=f"{save_dir}/plot_error_vs_time")
+        plot_kinematics_time_series(args, results, loop = 'open', filename=f"{save_dir}/plot_trajectory_open.png")
+        plot_kinematics_errors(args, results, loop = 'open', filename=f"{save_dir}/plot_error_vs_time")
 
         #Global Closed Plots
-        plot_trajectory_components(args, results, loop = 'closed', filename=f"{save_dir}/plot_trajectory_closed.png")
-        plot_errors_and_position_time(args, results, loop = 'closed', filename=f"{save_dir}/plot_error_vs_time")
+        plot_kinematics_time_series(args, results, loop = 'closed', filename=f"{save_dir}/plot_trajectory_closed.png")
+        plot_kinematics_errors(args, results, loop = 'closed', filename=f"{save_dir}/plot_error_vs_time")
     elif cli_args.version == 'save':
         print("\n[Info] Saving Test Results to Excel/Logs...")
         

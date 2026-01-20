@@ -1,35 +1,23 @@
 - maxiter: 5000
-  select_features: &id001
-  - dx
-  - dy
   optimizer: cobyla
   encoding: compact
   model: vanilla
-  predict: delta
+  predict: motion
   window_size: 5
   horizon: 5
   reconstruct_val: false
   save_plot: true
-  ansatz: efficientsu2
   entangle: reverse_linear
-  reps: 1
-  run: 0
-- maxiter: 5000
-  select_features: *id001
-  optimizer: cobyla
-  encoding: compact
-  model: vanilla
-  predict: delta
-  window_size: 5
-  horizon: 5
-  reconstruct_val: false
-  save_plot: true
   ansatz: efficientsu2
-  entangle: reverse_linear
   reps: 3
-  run: 0
+  select_features:
+  - wv
+  - sv
+  - yr
+  - ya
+  # - radeg
+  - rarad
 - maxiter: 5000
-  select_features: *id001
   optimizer: cobyla
   encoding: compact
   model: vanilla
@@ -38,7 +26,13 @@
   horizon: 5
   reconstruct_val: false
   save_plot: true
-  ansatz: efficientsu2
   entangle: reverse_linear
-  reps: 5
-  run: 0
+  ansatz: efficientsu2
+  reps: 3
+  select_features:
+  - dwv
+  - dsv
+  - dyr
+  - dya
+  # - radeg
+  - rarad

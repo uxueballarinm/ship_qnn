@@ -12,7 +12,7 @@ except ImportError:
 
 # --- DEFAULTS (Must match your argparse defaults) ---
 DEFAULTS = {
-    'data': "datasets\zigzag_10_40_ood_reduced_2_s.csv",
+    'data': "datasets\zigzag_11_11_ind_reduced_2_s.csv",
     'select_features': None,
     'drop_features': None,
     'window_size': 5,

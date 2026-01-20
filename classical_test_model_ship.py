@@ -58,12 +58,13 @@ def run_test_classical(cli_args):
 
     # 3. PREPARE TEST DATA
     df = pd.read_csv(data_path, index_col=0)
-    df['delta_x'] = df['position_x'].diff().fillna(0)
-    df['delta_y'] = df['position_y'].diff().fillna(0)
-
+    df['delta Surge Velocity'] = df['Surge Velocity'].diff().fillna(0)
+    df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
+    df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
+    df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
     # Feature Mapping (Robustness)
     cols = map_names(args.features)
-    pred_cols = ["delta_x", "delta_y"] if args.predict == "delta" else ["position_x", "position_y"]
+    pred_cols = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"] if args.predict == "delta" else ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
     
     # Extract and Scale
     feature_seqs = df[cols].to_numpy()
@@ -86,8 +87,7 @@ def run_test_classical(cli_args):
     print(f"Inference Device: {device}")
 
     input_dim = x_test.shape[2] 
-    output_dim = args.horizon * 2 
-
+    output_dim = args.horizon * y_test.shape[-1]
     model = ClassicalLSTM(
         input_size=input_dim,
         hidden_size=args.hidden_size,
@@ -95,8 +95,8 @@ def run_test_classical(cli_args):
         output_size=output_dim,
         seed=args.run
     )
-    
-    wrapper = ClassicalWrapper(model, device)
+
+    wrapper = ClassicalWrapper(model, device, output_shape=y_test.shape)
     
     # 5. EVALUATE
     print("Running Evaluation...")
@@ -113,10 +113,19 @@ def run_test_classical(cli_args):
         os.makedirs(save_dir)
         
     print(f"Saving plots to {save_dir}...")
-    plot_horizon_branches(args, results, filename=f"{save_dir}/plot_branches.png")
-    plot_horizon_euclidean_boxplots(args, results, mode='local', filename=f"{save_dir}/plot_horizon_errors")
-    plot_trajectory_components(args, results, filename=f"{save_dir}/plot_trajectory.png")
-    plot_errors_and_position_time(args, results, filename=f"{save_dir}/plot_error_vs_time")
+    
+    
+    # Local plots
+    plot_kinematics_branches(args, results, filename=f"{save_dir}/plot_branches_local.png")
+    plot_kinematics_boxplots(args, results, mode='local', filename=f"{save_dir}/plot_horizon_errors")
+
+    # Global Open Plots
+    plot_kinematics_time_series(args, results, loop = 'open', filename=f"{save_dir}/plot_kinematics_open.png")
+    plot_kinematics_errors(args, results, loop = 'open', filename=f"{save_dir}/plot_error_vs_time")
+    #Global Closed Plots
+    plot_kinematics_time_series(args, results, loop = 'closed', filename=f"{save_dir}/plot_kinematics_closed.png")
+    plot_kinematics_errors(args, results, loop = 'closed', filename=f"{save_dir}/plot_error_vs_time")
+    
 
     print("Done.")
 

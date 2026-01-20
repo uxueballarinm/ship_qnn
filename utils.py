@@ -36,7 +36,8 @@ from qiskit_machine_learning.neural_networks import EstimatorQNN
 from qiskit_algorithms.optimizers import SPSA, COBYLA
 
 colors = ['#E60000', '#FF8C00', '#C71585', '#008080', '#1E90FF']
-full_feature_set = ["Position X", "Position Y", "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)", "OOD Label"]
+#"Position X", "Position Y",
+full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)", "OOD Label"]
 
 
 def str2bool(v):
@@ -59,12 +60,14 @@ def map_names(feature_list, reverse=False):
     """
     # Central Dictionary
     code_to_name = {
-        "px": "Position X", "py": "Position Y",
+        #"px": "Position X", "py": "Position Y",
         "wv":"Surge Velocity", "sv":"Sway Velocity", 
         "yr":"Yaw Rate", "ya":"Yaw Angle",
         "vu": "Speed U", "radeg": "Rudder Angle (deg)",
         "rarad": "Rudder Angle (rad)", "OOD": "OOD Label",
-        "dx": "delta x", "dy": "delta y"
+        "dwv":"delta Surge Velocity", "dsv":"delta Sway Velocity",
+        "dyr":"delta Yaw Rate", "dya":"delta Yaw Angle",
+        #"dx": "delta x", "dy": "delta y"
     }
 
     if reverse: # (Name -> Code)
@@ -403,9 +406,10 @@ class ClassicalLSTM(nn.Module):
         return out
     
 class ClassicalWrapper:
-    def __init__(self, torch_model, device):
+    def __init__(self, torch_model, device,output_shape = None):
         self.model = torch_model
         self.device = device
+        self.num_targets = output_shape[2] if output_shape else 2
             
     def forward(self, x, params):
         # params is actually the state_dict which we load
@@ -415,19 +419,22 @@ class ClassicalWrapper:
         t_x = torch.tensor(x, dtype=torch.float32).to(self.device)
         with torch.no_grad():
             out = self.model(t_x)
-        # Reshape back to (N, Horizon, 2)
-        return out.cpu().numpy().reshape(x.shape[0], -1, 2)
+        total_out = out.shape[1]
+        horizon = total_out // self.num_targets
+        
+        return out.cpu().numpy().reshape(x.shape[0], horizon, self.num_targets)
 
 
 # TRAIN AND EVALUATE MODEL
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
 def compute_loss(args, pred, target, reconstruct, scaler=None):
+    num_targets = target.shape[-1]
     
     if reconstruct and scaler:
 
-        target_real = scaler.inverse_transform(target.reshape(-1, 2)).reshape(target.shape)
-        pred_real = scaler.inverse_transform(pred.reshape(-1, 2)).reshape(pred.shape)
+        target_real = scaler.inverse_transform(target.reshape(-1, num_targets)).reshape(target.shape)
+        pred_real = scaler.inverse_transform(pred.reshape(-1, num_targets)).reshape(pred.shape)
 
         if args.predict == 'delta':
             target_traj = np.cumsum(target_real, axis=1)
@@ -492,251 +499,6 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         "nfev": res.nfev if hasattr(res, 'nfev') else len(train_history)
     }
 
-def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
-    """
-    Performs Recursive 'Fan' Prediction.
-    
-    1. At each step 'i', predicts the full Horizon (e.g., 5 steps).
-    2. Stores the FULL Horizon into the output matrix (for analysis).
-    3. Uses ONLY the 1st step prediction to update the window for step 'i+1'.
-    
-    Returns:
-        recursive_preds (N, H, 2): The collection of all horizon predictions made at each step.
-        recursive_ratio (float): Percentage of features driven by the model (0.0 - 1.0).
-    """
-    
-    # 1. Setup
-    num_samples = x_test.shape[0] # N
-    horizon = args.horizon        # H
-    
-    # Feature Indexing
-    feat_names = args.features 
-    def get_idx(name):
-        return feat_names.index(name) if name in feat_names else None
-
-    idx_px = get_idx('Position X')
-    idx_py = get_idx('Position Y')
-    idx_dx = get_idx('delta x')
-    idx_dy = get_idx('delta y')
-
-    if args.predict == 'pos' and (idx_px is None or idx_py is None):
-        print("  > [Warning] Model is not able to predict absolute positions without including them as features.")
-        print("Use '--predict delta' or include 'px py' in --select_features.")
-
-    # 2. Calculate Recursivity Metrics & Log
-    updated_features = set()
-    updates_log = [] 
-
-    def log_status(target_name, input_idx, mode_str):
-        if input_idx is not None:
-            updated_features.add(input_idx)
-            updates_log.append((target_name, feat_names[input_idx], f"✅ Closed-Loop ({mode_str})"))
-        else:
-            updates_log.append((target_name, "None", f"⚠️ OPEN-LOOP (Input missing)"))
-
-    # Check which features will be updated by the logic below
-    if args.predict == 'delta':
-        log_status('delta x', idx_dx, 'Direct')
-        log_status('delta y', idx_dy, 'Direct')
-        log_status('delta x', idx_px, 'Integration')
-        log_status('delta y', idx_py, 'Integration')
-    else: # predict == 'pos'
-        log_status('Position X', idx_px, 'Direct')
-        log_status('Position Y', idx_py, 'Direct')
-        log_status('Position X', idx_dx, 'Differentiation')
-        log_status('Position Y', idx_dy, 'Differentiation')
-
-    recursive_ratio = len(updated_features) / len(feat_names) if feat_names else 0.0
-
-    # 3. Shortcut for 0% recursivity
-    if len(updated_features) == 0:
-        print("  > [Warning] Fully Open-Loop detected. Skipping recursive simulation (using fast forward pass).")
-        preds_full = model.forward(x_test, best_params)
-        return preds_full, 0.0
-
-    print(f"\n  {'Target Output':<16} | {'Found Input':<16} | {'Recursive Status'}")
-    print(f"  {'-'*16}-+-{'-'*16}-+-{'-'*40}")
-    for tgt, inp, status in updates_log:
-        if inp != "None": 
-             print(f"  {tgt:<16} | {inp:<16} | {status}")
-    print(f"  {'-'*85}")
-    print(f"  > Recursivity Score: {recursive_ratio*100:.1f}% ({len(updated_features)}/{len(feat_names)} features driven by model)\n")
-    
-    # 4. Initialize with the very first window of the test set
-    # shape (1, W, F)
-    curr_window = x_test[0:1, :, :] 
-    
-    # To enforce physics, we need the "real" state of the last timestep in the current window
-    last_step_real = x_scaler.inverse_transform(curr_window[:, -1, :])
-
-    # Output Container: (N, H, 2)
-    # Row 'i' will contain the forecast made at step 'i' for [i+1 ... i+H]
-    recursive_preds = np.zeros((num_samples, horizon, 2))
-    last_px, last_py = 0.0, 0.0
-
-    # 5. Main Loop (Iterate through the entire dataset)
-    for i in range(num_samples):
-        
-        # A. Predict Full Horizon
-        # model.forward returns (1, H, 2). We keep ALL of it.
-        preds_full = model.forward(curr_window, best_params) # Shape (1, H, 2)
-        
-        # Store the full "Fan" of predictions for this step
-        recursive_preds[i] = preds_full[0]
-        
-        # B. Recursion Logic: Extract ONLY the 1st step to drive simulation
-        pred_step = preds_full[:, 0, :] # Shape (1, 2) -> The immediate next step
-        
-        # --- Prepare Window for Next Iteration (i+1) ---
-        
-        # 1. Fetch Ground Truth for Auxiliary Features (Orientation, Velocity)
-        # We need the features for time t = i+1.
-        # Since x_test windows overlap, the LAST row of x_test[i+1] contains the data for t=i+1.
-        # We clamp indices to handle the very last sample.
-        next_gt_idx = min(i + 1, num_samples - 1)
-        next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] # Shape (1, F)
-
-        # 2. Denormalize for Physics Calculation
-        if y_scaler:
-            pred_step_real = y_scaler.inverse_transform(pred_step)
-        else:
-            pred_step_real = pred_step
-
-        next_gt_real = x_scaler.inverse_transform(next_gt_features_norm)
-        
-        # 3. Create New Row: Start with GT (Aux features), Overwrite Pos/Delta with Preds
-        new_row_real = np.copy(next_gt_real)
-        
-        if args.predict == 'delta':
-            dx, dy = pred_step_real[0, 0], pred_step_real[0, 1]
-            
-            # Overwrite Deltas
-            if idx_dx is not None: new_row_real[0, idx_dx] = dx
-            if idx_dy is not None: new_row_real[0, idx_dy] = dy
-            
-            # Integrate Position (Pos_new = Pos_old_simulated + Delta_pred)
-            if idx_px is not None: new_row_real[0, idx_px] = last_step_real[0, idx_px] + dx
-            if idx_py is not None: new_row_real[0, idx_py] = last_step_real[0, idx_py] + dy
-            
-        else: 
-            px, py = pred_step_real[0, 0], pred_step_real[0, 1]
-            
-            # Overwrite Positions
-            if idx_px is not None: new_row_real[0, idx_px] = px
-            if idx_py is not None: new_row_real[0, idx_py] = py
-            
-            # Differentiate Deltas (Delta_new = Pos_pred - Pos_old_simulated)
-            if idx_dx is not None: 
-                new_row_real[0, idx_dx] = px - last_px #last_step_real[0, idx_px]
-                last_px = px
-            if idx_dy is not None: 
-                new_row_real[0, idx_dy] = py - last_py #last_step_real[0, idx_py]
-                last_py = py
-
-        # 4. Update 'last_step_real' for the next iteration
-        last_step_real = new_row_real
-
-        # 5. Normalize and Shift Window
-        new_row_norm = x_scaler.transform(new_row_real)
-        
-        # Drop first timestep, Append new simulated timestep
-        curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
-
-    return recursive_preds, recursive_ratio
-
-def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
-    """
-    Runs BOTH One-Step (Teacher Forcing) and Recursive (Dead Reckoning) evaluations.
-    """
-
-    results = {}
-    orig_shape = y_test.shape
-    
-    # ONE-STEP EVALUATION
-    preds_norm_step = model.forward(x_test, params) 
-    
-    # Unscale
-    if y_scaler:
-        preds_real_step = y_scaler.inverse_transform(preds_norm_step.reshape(-1, orig_shape[-1])).reshape(orig_shape)
-        y_gt_real = y_scaler.inverse_transform(y_test.reshape(-1, orig_shape[-1])).reshape(orig_shape)
-    else:
-        preds_real_step = preds_norm_step
-        y_gt_real = y_test
-
-    # Step metrics
-    results['Step_MSE'] = mean_squared_error(y_gt_real.reshape(-1, orig_shape[-1]), preds_real_step.reshape(-1, orig_shape[-1]))
-    results['Step_R2'] = r2_score(y_gt_real.reshape(-1, orig_shape[-1]), preds_real_step.reshape(-1, orig_shape[-1]))
-
-    if args.predict == 'delta':
-        true_path_backbone = np.concatenate([np.zeros((1, 2)), np.cumsum(y_gt_real[:, 0, :], axis=0)])
-        true_path = true_path_backbone[:-1, None, :] + np.cumsum(y_gt_real, axis=1)
-        pred_path_local = true_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1)
-        pred_path_backbone = np.concatenate([np.zeros((1, 2)), np.cumsum(preds_real_step[:, 0, :], axis=0)])
-        pred_path_global_open = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1)
-    else:
-        true_path_backbone = y_gt_real[:, 0, :]
-        true_path = y_gt_real
-        pred_path_local = preds_real_step
-
-        pred_path_backbone = preds_real_step[:, 0, :]
-        pred_path_global_open = preds_real_step
-
-    results['Local_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_local.reshape(-1, 2))
-    norm_local_error = np.linalg.norm(true_path - pred_path_local, axis=2)
-    results['Local_ADE'] = np.mean(norm_local_error)
-
-    results['Global_open_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_global_open.reshape(-1, 2))
-    results['Global_open_R2'] = r2_score(true_path.reshape(-1, 2), pred_path_global_open.reshape(-1, 2))
-    norm_global_error = np.linalg.norm(true_path - pred_path_global_open, axis=2)
-    results['Global_open_ADE'] = np.mean(norm_global_error)    
-    results['Global_open_FDE'] = norm_global_error[-1,-1]      
-    results['Global_open_Max'] = np.max(norm_global_error)   
-
-    # RECURSIVE EVALUATION (Updated Unpacking)
-    preds_norm_rec, rec_ratio = recursive_forward_pass(args, model, params, x_test, x_scaler, y_scaler)
-    results['Recursivity'] = rec_ratio  # <--- Store Metric
-    
-    # Unscale
-    if y_scaler:
-        preds_real_rec = y_scaler.inverse_transform(preds_norm_rec.reshape(-1, orig_shape[-1])).reshape(orig_shape)
-    else:
-        preds_real_rec = preds_norm_rec
-    
-    if args.predict == 'delta':
-        pred_path_backbone = np.concatenate([np.zeros((1, 2)), np.cumsum(preds_real_rec[:, 0, :], axis=0)])
-        pred_path_global = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_rec, axis=1)
-    else:
-        pred_path_backbone = preds_real_rec[:, 0, :]
-        pred_path_global = preds_real_rec
-        
-    results['Global_closed_MSE'] = mean_squared_error(true_path.reshape(-1, 2), pred_path_global.reshape(-1, 2))
-    results['Global_closed_R2'] = r2_score(true_path.reshape(-1, 2), pred_path_global.reshape(-1, 2))
-    norm_global_error = np.linalg.norm(true_path - pred_path_global, axis=2)
-    results['Global_closed_ADE'] = np.mean(norm_global_error)    
-    results['Global_closed_FDE'] = norm_global_error[-1,-1]      
-    results['Global_closed_Max'] = np.max(norm_global_error) 
-
-    return {
-        "true_deltas_denorm": y_gt_real,
-        "true_backbone": true_path_backbone,
-        "true_path": true_path,
-        "local":{              
-            "pred_deltas_denorm": preds_real_step,
-            "pred_path": pred_path_local,         
-        },
-        "global":{
-            "closed":{
-                "pred_deltas_denorm": preds_real_rec,
-                "pred_path": pred_path_global,
-            },
-            "open":{
-                "pred_deltas_denorm": preds_real_step,
-                "pred_path": pred_path_global_open,
-            }
-               
-        },
-        "metrics": results
-    }
 
 def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler = None,device='cpu'):
     """
@@ -800,11 +562,12 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         model.eval()
         val_loss_accum = 0
         total_samples = 0
+        num_targets = y_val.shape[-1]
         with torch.no_grad():
             for x_v, y_v in val_loader:
                 val_preds = model(x_v)
-                v_p_np = val_preds.cpu().numpy().reshape(-1, args.horizon, 2)
-                v_y_np = y_v.cpu().numpy().reshape(-1, args.horizon, 2)                
+                v_p_np = val_preds.cpu().numpy().reshape(-1, args.horizon, num_targets)
+                v_y_np = y_v.cpu().numpy().reshape(-1, args.horizon, num_targets)                
                 batch_loss = compute_loss(args, v_p_np, v_y_np, args.reconstruct_val, y_scaler) 
                 val_loss_accum += batch_loss * x_v.size(0)
                 total_samples += x_v.size(0)
@@ -850,6 +613,200 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         "val_history": val_history,
         "nfev": epoch + 1
     }
+
+
+def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
+    """
+    Performs Recursive 'Fan' Prediction for N targets (Generic).
+    Supports two modes:
+      1. 'motion': Model predicts absolute values -> Direct Feedback.
+      2. 'delta':  Model predicts changes -> Integration Feedback (New = Old + Pred).
+    """
+    
+    # 1. Setup
+    num_samples = x_test.shape[0] # N
+    horizon = args.horizon        # H
+    num_targets = len(args.targets)
+
+
+    # 2. Map Targets to Feature Indices (for feedback)
+    # We need to know: Output #0 corresponds to Input Feature #X?
+    target_to_feature_idx = {}
+    # Determine integration mode based on args
+    is_delta_mode = (args.predict == 'delta')
+    mode_label = "Integration (Delta)" if is_delta_mode else "Direct (Motion)"
+
+    print(f"\n  {'Target Output':<20} | {'Input Feature':<20} | {'Feedback Mode'}")
+    print(f"  {'-'*20}-+-{'-'*20}-+-{'-'*20}")
+    
+    for t_idx, t_name in enumerate(args.targets):
+        # If we predict 'delta', the target name usually matches the feature name 
+        # (e.g. we predict 'Surge Velocity' change, to update 'Surge Velocity' feature)
+        # Note: If your target names are explicitly "Delta Surge", you might need a mapping dictionary here.
+        # Assuming args.targets contains names that exist in args.features:
+        if t_name in args.features:
+            f_idx = args.features.index(t_name)
+            target_to_feature_idx[t_idx] = f_idx
+            print(f"  {t_name:<20} | {t_name:<20} | ✅ {mode_label}")
+        else:
+            print(f"  {t_name:<20} | {'None':<20} | ⚠️ Open-Loop")
+
+    recursive_ratio = len(target_to_feature_idx) / len(args.targets) if args.targets else 0.0
+
+    if not target_to_feature_idx:
+        print("  > [Warning] No autoregressive targets found. Using Open-Loop.")
+        return model.forward(x_test, best_params), 0.0
+
+    # 3. Initialization
+    # Initialize with the very first window
+    curr_window = x_test[0:1, :, :] 
+    
+    # Track the "Real Physics" state of the last step to support integration
+    # Shape (1, F)
+    last_step_real = x_scaler.inverse_transform(curr_window[:, -1, :])
+
+    # Output Container
+    recursive_preds = np.zeros((num_samples, horizon, num_targets))
+
+    # 4. Main Loop
+    for i in range(num_samples):
+        
+        # A. Predict Full Horizon
+        # model.forward returns (1, H, 2). We keep ALL of it.
+        preds_full = model.forward(curr_window, best_params) # Shape (1, H, 2)
+        recursive_preds[i] = preds_full[0]
+        # B. Recursion: Prepare Next Window
+        # We need to construct the input for t+1. 
+        # Start by grabbing the Ground Truth (GT) for t+1 to fill in auxiliary features (like Rudder, RPM)
+        next_gt_idx = min(i + 1, num_samples - 1)
+        next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] 
+        
+        # Denormalize everything to work in Physics Space
+        next_input_real = x_scaler.inverse_transform(next_gt_features_norm) # (1, F)
+        
+        # Get the immediate next prediction (step 0 of horizon)
+        pred_next_step_norm = preds_full[:, 0, :]
+        if y_scaler:
+            pred_step_real = y_scaler.inverse_transform(pred_next_step_norm) # (1, T)
+        else:
+            pred_step_real = pred_next_step_norm
+            
+        # C. Update the features that are driven by the model
+        for t_idx, f_idx in target_to_feature_idx.items():
+            pred_val = pred_step_real[0, t_idx]
+            
+            if is_delta_mode:
+                # INTEGRATION LOGIC: New State = Old State + Prediction
+                # We use 'last_step_real' which holds the *simulated* state from the previous iteration
+                new_val = last_step_real[0, f_idx] + pred_val
+                next_input_real[0, f_idx] = new_val
+            else:
+                # DIRECT LOGIC: New State = Prediction
+                next_input_real[0, f_idx] = pred_val
+
+        # D. Update 'last_step_real' for the next iteration (i+2)
+        last_step_real = next_input_real
+
+        # E. Normalize and Shift Window
+        new_row_norm = x_scaler.transform(next_input_real)
+        curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
+
+    return recursive_preds, recursive_ratio
+
+def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
+    """
+    Runs BOTH One-Step (Teacher Forcing) and Recursive (Dead Reckoning) evaluations.
+    """
+
+    results = {}
+    orig_shape = y_test.shape # (N, H, T)
+    num_targets = orig_shape[-1]
+    # ONE-STEP EVALUATION
+    preds_norm_step = model.forward(x_test, params) 
+    
+    # Unscale
+    if y_scaler:
+        preds_real_step = y_scaler.inverse_transform(preds_norm_step.reshape(-1, num_targets)).reshape(orig_shape)
+        y_gt_real = y_scaler.inverse_transform(y_test.reshape(-1, num_targets)).reshape(orig_shape)
+    else:
+        preds_real_step = preds_norm_step
+        y_gt_real = y_test
+
+    # Step metrics
+    results['Step_MSE'] = mean_squared_error(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
+    results['Step_R2'] = r2_score(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
+
+    if args.predict == 'delta':
+        true_path_backbone = np.concatenate([np.zeros((1, num_targets)), np.cumsum(y_gt_real[:, 0, :], axis=0)])
+        true_path = true_path_backbone[:-1, None, :] + np.cumsum(y_gt_real, axis=1)
+        pred_path_local = true_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1)
+        pred_path_backbone = np.concatenate([np.zeros((1, num_targets)), np.cumsum(preds_real_step[:, 0, :], axis=0)])
+        pred_path_global_open = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_step, axis=1)
+    else:
+        true_path_backbone = y_gt_real[:, 0, :]
+        true_path = y_gt_real
+        pred_path_local = preds_real_step
+
+        pred_path_backbone = preds_real_step[:, 0, :]
+        pred_path_global_open = preds_real_step
+
+    results['Local_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_local.reshape(-1, num_targets))
+    norm_local_error = np.linalg.norm(true_path - pred_path_local, axis=2)
+    results['Local_ADE'] = np.mean(norm_local_error)
+
+    results['Global_open_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
+    results['Global_open_R2'] = r2_score(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
+    norm_global_error = np.linalg.norm(true_path - pred_path_global_open, axis=2)
+    results['Global_open_ADE'] = np.mean(norm_global_error)    
+    results['Global_open_FDE'] = norm_global_error[-1,-1]      
+    results['Global_open_Max'] = np.max(norm_global_error)   
+
+    # RECURSIVE EVALUATION (Updated Unpacking)
+    preds_norm_rec, rec_ratio = recursive_forward_pass(args, model, params, x_test, x_scaler, y_scaler)
+    results['Recursivity'] = rec_ratio  # <--- Store Metric
+    
+    # Unscale
+    if y_scaler:
+        preds_real_rec = y_scaler.inverse_transform(preds_norm_rec.reshape(-1, num_targets)).reshape(orig_shape)
+    else:
+        preds_real_rec = preds_norm_rec
+    
+    if args.predict == 'delta':
+        pred_path_backbone = np.concatenate([np.zeros((1, num_targets)), np.cumsum(preds_real_rec[:, 0, :], axis=0)])
+        pred_path_global = pred_path_backbone[:-1, None, :] + np.cumsum(preds_real_rec, axis=1)
+    else:
+        pred_path_backbone = preds_real_rec[:, 0, :]
+        pred_path_global = preds_real_rec
+        
+    results['Global_closed_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_global.reshape(-1, num_targets))
+    results['Global_closed_R2'] = r2_score(true_path.reshape(-1, num_targets), pred_path_global.reshape(-1, num_targets))
+    norm_global_error = np.linalg.norm(true_path - pred_path_global, axis=2)
+    results['Global_closed_ADE'] = np.mean(norm_global_error)    
+    results['Global_closed_FDE'] = norm_global_error[-1,-1]      
+    results['Global_closed_Max'] = np.max(norm_global_error) 
+
+    return {
+        "true_deltas_denorm": y_gt_real,
+        "true_backbone": true_path_backbone,
+        "true_path": true_path,
+        "local":{              
+            "pred_deltas_denorm": preds_real_step,
+            "pred_path": pred_path_local,         
+        },
+        "global":{
+            "closed":{
+                "pred_deltas_denorm": preds_real_rec,
+                "pred_path": pred_path_global,
+            },
+            "open":{
+                "pred_deltas_denorm": preds_real_step,
+                "pred_path": pred_path_global_open,
+            }
+               
+        },
+        "metrics": results
+    }
+
 
 # SAVE AND PLOT RESULTS
 # ------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1430,302 +1387,308 @@ def plot_convergence(args, results, filename=None):
 # ==========================================
 # PLOT 1: LOCAL BRANCHES (Dynamics)
 # ==========================================
-def plot_horizon_branches(args, data, step_interval=20, filename=None):
-    true_path = data['true_backbone']
+def plot_kinematics_branches(args, data, step_interval=20, filename=None):
+    """
+    Plots short horizon predictions branching off the true path for all 4 targets.
+    Replaces: plot_horizon_branches
+    """
+    true_path = data['true_backbone'] # (N, 4)
+    pred_path = data['local']['pred_path'] # (N, H, 4)
     time_steps = np.arange(len(true_path))
-    pred_path = data['local']['pred_path']
 
-    fig = plt.figure(figsize=(12, 9))
-    gs = gridspec.GridSpec(2, 2)
+    fig = plt.figure(figsize=(14, 10))
+    gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
 
-    # A. Map (Left)
-    ax_map = fig.add_subplot(gs[:, 0])
-    ax_map.plot(true_path[:, 0], true_path[:, 1], 'k-', linewidth=1.5, label='True Path', alpha=0.4)
-    ax_map.set_title("2D Trajectory Map", **subtitle_style)
-    ax_map.set_xlabel(r"$\mathit{x}$ [m]", **label_style)
-    ax_map.set_ylabel(r"$\mathit{y}$ [m]", **label_style)
-    ax_map.axis('equal')
-    ax_map.grid(True, linestyle='--', alpha=0.5, linewidth=1.0) 
+    targets = [
+        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
+        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
+        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
+        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
+    ]
+    
+    axes = []
+    
+    # 1. Setup Axes and Plot Background Truth
+    for i, target in enumerate(targets):
+        row, col = i // 2, i % 2
+        ax = fig.add_subplot(gs[row, col])
+        
+        # Plot continuous True Path in background
+        ax.plot(time_steps, true_path[:, target['idx']], 'k-', linewidth=1.5, alpha=0.3, label='True Path')
+        
+        ax.set_title(target['name'], **subtitle_style)
+        ax.set_ylabel(rf"$\mathit{{{target['name'].split()[0]}}}$ [{target['unit']}]", **label_style)
+        if row == 1: ax.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
+        ax.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
+        axes.append(ax)
 
-    # B. X-t (Top Right)
-    ax_x = fig.add_subplot(gs[0, 1])
-    ax_x.plot(time_steps, true_path[:, 0], 'k-', linewidth=1.5, alpha=0.4)
-    ax_x.set_title("X Position vs Time", **subtitle_style)
-    ax_x.set_ylabel(r"$\mathit{x}$ [m]", **label_style)
-    ax_x.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
-    plt.setp(ax_x.get_xticklabels(), visible=False)
-
-    # C. Y-t (Bottom Right)
-    ax_y = fig.add_subplot(gs[1, 1], sharex=ax_x)
-    ax_y.plot(time_steps, true_path[:, 1], 'k-', linewidth=1.5, alpha=0.4)
-    ax_y.set_title("Y Position vs Time", **subtitle_style)
-    ax_y.set_ylabel(r"$\mathit{y}$ [m]", **label_style)
-    ax_y.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
-    ax_y.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
-
-    # 3. Plot Branches
+    # 2. Plot Branches
     num_samples = pred_path.shape[0]
-    # Use global colors if available, else fallback
-    color_branch = colors[0] if 'colors' in globals() and len(colors) > 0 else '#D62728'
+    color_branch = colors[1] if 'colors' in globals() and len(colors) > 1 else '#1f77b4'
 
     for i in range(0, num_samples, step_interval):
-        branch = np.vstack([true_path[i], pred_path[i]]) 
+        # Create time indices for this specific branch
         t_indices = np.arange(i, i + args.horizon + 1)
-        if t_indices[-1] >= len(time_steps): continue 
+        if t_indices[-1] >= len(time_steps): continue
         
-        branch_x, branch_y = branch[:, 0], branch[:, 1]
-        label = f'Pred Horizon (H={args.horizon})' if i == 0 else ""
-        
-        ax_map.plot(branch_x, branch_y, color=color_branch, linestyle='-', linewidth=1.8, alpha=0.7, label=label)
-        ax_x.plot(t_indices, branch_x, color=color_branch, linestyle='-', linewidth=1.8, alpha=0.7)
-        ax_y.plot(t_indices, branch_y, color=color_branch, linestyle='-', linewidth=1.8, alpha=0.7)
+        # Get the branch data (Start at true[i], then append preds)
+        # We need to do this for all 4 dimensions
+        curr_true = true_path[i].reshape(1, 4)
+        curr_pred = pred_path[i] # (H, 4)
+        branch_data = np.vstack([curr_true, curr_pred]) # (H+1, 4)
 
-    ax_map.legend(prop=legend_prop)
+        # Plot on all 4 subplots
+        for idx, ax in enumerate(axes):
+            # Only label the first branch to avoid legend spam
+            lbl = f'Pred Horizon (H={args.horizon})' if i == 0 else ""
+            ax.plot(t_indices, branch_data[:, idx], color=color_branch, 
+                    linestyle='-', linewidth=1.5, alpha=0.8, label=lbl)
+
+    # Add legend to first plot
+    axes[0].legend(prop=legend_prop if 'legend_prop' in globals() else None)
+    for ax in axes: 
+        if '_force_ticks_font' in globals(): _force_ticks_font(ax)
+
+    fig.suptitle("Local Horizon Branches (Kinematics)", y=0.96, **title_style)
     
-    fig.suptitle("Local Horizon Branches (Dynamics)", y=0.96, **title_style)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    for ax in [ax_map, ax_x, ax_y]: _force_ticks_font(ax)
-
-    if args.save_plot: plt.savefig(filename, dpi=300, bbox_inches='tight')
+    if args.save_plot and filename:
+        plt.savefig(filename + "_local_branches.png", dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()
-
-
 # ==========================================
 # PLOT 2: GLOBAL DRIFT (Trajectory)
 # ==========================================
-def plot_trajectory_components(args, data, loop='closed', horizons=[1,5], filename=None):
-    if not isinstance(horizons, list): horizons = [horizons]
-    horizons = [k-1 for k in horizons] 
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import numpy as np
 
-    true_path = data['true_backbone'] 
-    time_steps = np.arange(len(true_path))
-    pred_path = data['global'][loop]['pred_path']
+# ==========================================
+# PLOT 2: KINEMATICS VS TIME (4 Targets)
+# ==========================================
+def plot_kinematics_time_series(args, data, loop='closed', horizon_step=1, filename=None):
+    """
+    Plots Surge, Sway, Yaw Rate, and Yaw Angle vs Time in a 2x2 grid.
+    """
+    # 1. Extract Data
+    # true_backbone shape expected: (N, 4) -> [Surge, Sway, Yaw Rate, Yaw Angle]
+    true_data = data['true_backbone'] 
+    
+    # pred_path shape expected: (N, Horizon, 4)
+    # We extract the specific horizon step 'k' to get a continuous trajectory (N, 4)
+    raw_pred = data['global'][loop]['pred_path']
+    
+    # Extract the k-th step from the horizon predictions to build a continuous line
+    k = horizon_step - 1
+    if k < raw_pred.shape[1]:
+        # Shift time to align with the horizon delay
+        pred_seq = raw_pred[:-k, k, :] if k > 0 else raw_pred[:, k, :]
+        true_seq = true_data[k:] if k > 0 else true_data
+    else:
+        print(f"Warning: Horizon step {horizon_step} is out of bounds.")
+        return
 
-    fig = plt.figure(figsize=(12, 9))
-    gs = gridspec.GridSpec(2, 2)
+    # Ensure lengths match exactly for plotting
+    min_len = min(len(true_seq), len(pred_seq))
+    true_seq = true_seq[:min_len]
+    pred_seq = pred_seq[:min_len]
+    time_steps = np.arange(min_len)
 
-    # A. Map
-    ax1 = fig.add_subplot(gs[:, 0])
-    ax1.plot(true_path[:, 0], true_path[:, 1], 'k-', linewidth=1.5, alpha=0.4, label='True Path')
-    ax1.set_title("2D Trajectory Map", **subtitle_style)
-    ax1.set_xlabel(r"$\mathit{x}$ [m]", **label_style)
-    ax1.set_ylabel(r"$\mathit{y}$ [m]", **label_style)
-    ax1.axis('equal')
-    ax1.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
+    # 2. Setup Figure
+    fig = plt.figure(figsize=(14, 10))
+    gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
+    
+    targets = [
+        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
+        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
+        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
+        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
+    ]
 
-    # B. X vs Time
-    ax2 = fig.add_subplot(gs[0, 1])
-    ax2.plot(time_steps, true_path[:, 0], 'k-', alpha=0.4, label='True X')
-    ax2.set_title("X Position vs Time", **subtitle_style)
-    ax2.set_ylabel(r"$\mathit{x}$ [m]", **label_style)
-    ax2.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
-    plt.setp(ax2.get_xticklabels(), visible=False)
-
-    # C. Y vs Time
-    ax3 = fig.add_subplot(gs[1, 1], sharex=ax2)
-    ax3.plot(time_steps, true_path[:, 1], 'k-', alpha=0.4, label='True Y')
-    ax3.set_title("Y Position vs Time", **subtitle_style)
-    ax3.set_ylabel(r"$\mathit{y}$ [m]", **label_style)
-    ax3.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
-    ax3.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
-
-    # 4. Plot Predictions
-    for k in horizons:
-        if k >= pred_path.shape[1]: continue
-
-        if k == 0:
-            p_plot = pred_path[:, k, :]
-            t_axis = time_steps[1:] 
-        else:
-            p_plot = pred_path[:-k, k, :] 
-            t_axis = time_steps[1+k:]   
-
-        min_len = min(len(t_axis), len(p_plot))
-        p_plot = p_plot[:min_len]
-        t_axis = t_axis[:min_len]
-
-        # Use global colors
-        color = colors[k % len(colors)] if 'colors' in globals() else '#1f77b4'
-        label = f'Rec. Path (k={k+1})'
+    # 3. Loop through the 4 targets and plot
+    axes = []
+    for i, target in enumerate(targets):
+        row = i // 2
+        col = i % 2
+        ax = fig.add_subplot(gs[row, col])
         
-        ax1.plot(p_plot[:, 0], p_plot[:, 1], '--', color=color, linewidth=2.0, alpha=0.9, label=label)
-        ax2.plot(t_axis, p_plot[:, 0], '--', color=color, alpha=0.9)
-        ax3.plot(t_axis, p_plot[:, 1], '--', color=color, alpha=0.9)
+        # Plot True
+        ax.plot(time_steps, true_seq[:, target['idx']], 'k-', linewidth=1.5, alpha=0.5, label='True')
+        
+        # Plot Pred
+        color = '#D62728' # Red for prediction (or use your global colors)
+        ax.plot(time_steps, pred_seq[:, target['idx']], '--', color=color, linewidth=2.0, alpha=0.9, label=f'Pred (k={horizon_step})')
 
-    ax1.legend(prop=legend_prop)
+        # Styling
+        ax.set_title(target['name'], **subtitle_style)
+        ax.set_ylabel(rf"$\mathit{{{target['name'].split()[0]}}}$ [{target['unit']}]", **label_style)
+        
+        # Only show X label on bottom rows
+        if row == 1:
+            ax.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
+        
+        ax.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
+        
+        # Force your custom tick font
+        if '_force_ticks_font' in globals(): 
+            _force_ticks_font(ax)
+            
+        axes.append(ax)
+
+    # Add single legend to the first plot or outside
+    axes[0].legend(prop=legend_prop if 'legend_prop' in globals() else None, loc='best')
+
+    # 4. Final Layout
+    header_title = f"Kinematics Analysis ({loop.capitalize()} Loop - Horizon Step {horizon_step})"
+    fig.suptitle(header_title, y=0.96, **title_style)
     
-    if loop == 'closed':fig.suptitle("Global Drift Analysis (Closed-Loop)", y=0.96, **title_style)
-    else: fig.suptitle("Global Drift Analysis (Open-Loop)", y=0.96, **title_style)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    for ax in [ax1, ax2, ax3]: _force_ticks_font(ax)
+    if args.save_plot and filename:
+        save_path = filename + f"_kinematics_{loop}_k{horizon_step}.png"
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+
+    if args.show_plot:
+        plt.show()
     
-    if args.save_plot: plt.savefig(filename, dpi=300, bbox_inches='tight')
-    if args.show_plot: plt.show()
     plt.close()
-
 
 # ==========================================
 # PLOT 3: ERROR ANALYSIS
 # ==========================================
-def plot_errors_and_position_time(args, data, mode='global', loop='closed', horizon_mode='mean', filename=None):
-    if mode not in data: return
+def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mode='mean', filename=None):
+    """
+    Top: Aggregate Error (Norm of the 4D error vector).
+    Bottom: Individual Error for each of the 4 targets over time.
+    Replaces: plot_errors_and_position_time
+    """
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
-    pred_deltas_all_h = pred_obj['pred_deltas_denorm']
-    true_deltas_all_h = data['true_deltas_denorm']
-    pred_path_all_h = pred_obj['pred_path'] 
-    true_path_all_h = data['true_path']
-    true_backbone = data['true_backbone']
-
-    num_points = min(pred_deltas_all_h.shape[0], true_deltas_all_h.shape[0])
-    pred_deltas_all_h = pred_deltas_all_h[:num_points]
-    true_deltas_all_h = true_deltas_all_h[:num_points]
-    pred_path_all_h = pred_path_all_h[:num_points]
-    true_path_all_h = true_path_all_h[:num_points]
-    true_pos_seq_flat = true_backbone[1 : 1 + num_points] if args.predict == 'delta' else true_backbone[:num_points]        
+    
+    # Shapes: (N, H, 4)
+    pred_path = pred_obj['pred_path'] 
+    true_path = data['true_path'] # Assuming this is the expanded horizon version
+    
+    # Ensure matching lengths
+    num_points = min(pred_path.shape[0], true_path.shape[0])
+    pred_path = pred_path[:num_points]
+    true_path = true_path[:num_points]
     time_steps = np.arange(num_points)
 
-    raw_step_errors = np.linalg.norm(true_deltas_all_h - pred_deltas_all_h, axis=2)
-    raw_pos_errors  = np.linalg.norm(true_path_all_h - pred_path_all_h, axis=2)
-    max_h = raw_step_errors.shape[1]
+    # Calculate Errors
+    # 1. Component-wise error: (N, H, 4) -> abs diff
+    error_tensor = np.abs(true_path - pred_path)
+    
+    # 2. Norm error (Euclidean dist in 4D): (N, H)
+    norm_error = np.linalg.norm(true_path - pred_path, axis=2)
 
-    tasks = []
-    if isinstance(horizon_mode, (str, int)): horizon_mode = [horizon_mode]
-    for h in horizon_mode:
-        if h == 'mean':
-            tasks.append( ("Avg H", np.mean(raw_step_errors, axis=1), np.mean(raw_pos_errors, axis=1)) )
-        elif h == 'max':
-            tasks.append( ("Max H", np.max(raw_step_errors, axis=1), np.max(raw_pos_errors, axis=1)) )
-        elif isinstance(h, int):
-            k = h - 1
-            if k < max_h:
-                tasks.append( (f"H{h}", raw_step_errors[:, k], raw_pos_errors[:, k]) )
+    # Select Horizon Step (Mean vs Max vs Specific)
+    if horizon_mode == 'mean':
+        y_norm_err = np.mean(norm_error, axis=1) # (N,)
+        y_comp_err = np.mean(error_tensor, axis=1) # (N, 4)
+        label_str = "Mean over Horizon"
+    elif horizon_mode == 'max':
+        y_norm_err = np.max(norm_error, axis=1)
+        y_comp_err = np.max(error_tensor, axis=1)
+        label_str = "Max over Horizon"
+    elif isinstance(horizon_mode, int):
+        k = horizon_mode - 1
+        y_norm_err = norm_error[:, k]
+        y_comp_err = error_tensor[:, k, :]
+        label_str = f"Horizon Step {horizon_mode}"
 
+    # Plotting
     fig = plt.figure(figsize=(12, 12))
     gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1], hspace=0.3)
 
-    # A. Top Plot (Errors)
-    ax_top_left = plt.subplot(gs[0])
-    ax_top_right = ax_top_left.twinx()
-
-    num_lines = len(tasks)
-    if num_lines == 1:
-        colors_acc = ['#D62728'] 
-        colors_net = ['#1F77B4'] 
-    else:
-        colors_acc = [cm.Reds(x) for x in np.linspace(0.5, 1.0, num_lines)]
-        colors_net = [cm.Blues(x) for x in np.linspace(0.5, 1.0, num_lines)]
-
-    lines_legend = []
-    for i, (label, s_err, p_err) in enumerate(tasks):
-        accumulated_error = np.cumsum(s_err)
-        l1, = ax_top_left.plot(time_steps, accumulated_error, color=colors_acc[i], alpha=0.9, linewidth=2.5, label=f'Acc Error ({label})')
-        l2, = ax_top_right.plot(time_steps, p_err, color=colors_net[i], alpha=0.7, linewidth=2.0, linestyle='--', label=f'Net Error ({label})')
-        lines_legend.extend([l1, l2])
-
-    ax_top_left.set_ylabel(r"$\mathit{Accumulated\ Error}$ [m]", color=colors_acc[0], **label_style)
-    ax_top_left.tick_params(axis='y', labelcolor=colors_acc[0])
-    ax_top_left.grid(True, linestyle=':', alpha=0.6, linewidth=1.5)
+    # A. Top Plot: Aggregate Norm Error
+    ax_top = plt.subplot(gs[0])
     
-    ax_top_right.set_ylabel(r"$\mathit{Net\ Error}$ [m]", color=colors_net[0], **label_style)
-    ax_top_right.tick_params(axis='y', labelcolor=colors_net[0])
-
-    ax_top_left.legend(handles=lines_legend, loc='upper left', prop=legend_prop, ncol=2)
+    # Plot Accumulated Error
+    acc_error = np.cumsum(y_norm_err)
+    c_acc, c_net = '#D62728', '#1F77B4'
     
-    horizon_str = ", ".join([t[0] for t in tasks])
-
-    ax_top_left.set_title(f"Error Analysis ({mode.capitalize()} - {loop} - {horizon_str})", pad=20, **title_style)
-    ax_top_left.set_xlim(0, num_points)
-    ax_top_left.set_ylim(bottom=0); ax_top_right.set_ylim(bottom=0)
-
-    # B. Bottom Plot (Reference Path)
-    ax_bot_left = plt.subplot(gs[1])
-    ax_bot_right = ax_bot_left.twinx()
-
-    c_x, c_y = '#2CA02C', '#9467BD'
-    lx, = ax_bot_left.plot(time_steps, true_pos_seq_flat[:, 0], color=c_x, label='True X', linewidth=2.5)
-    ly, = ax_bot_right.plot(time_steps, true_pos_seq_flat[:, 1], color=c_y, label='True Y', linewidth=2.5)
-
-    ax_bot_left.set_ylabel(r"$\mathit{x}$ [m]", color=c_x, **label_style)
-    ax_bot_left.tick_params(axis='y', labelcolor=c_x)
-    ax_bot_right.set_ylabel(r"$\mathit{y}$ [m]", color=c_y, rotation=270, labelpad=25, **label_style)
-    ax_bot_right.tick_params(axis='y', labelcolor=c_y)
-
-    ax_bot_left.legend([lx, ly], ['True X', 'True Y'], loc='upper left', prop=legend_prop)
+    ax_top.plot(time_steps, acc_error, color=c_acc, linewidth=2.5, label='Accumulated Norm Error')
+    ax_top.set_ylabel(r"$\mathit{Accumulated\ Error}$", color=c_acc, **label_style)
+    ax_top.tick_params(axis='y', labelcolor=c_acc)
     
-    ax_bot_left.set_title("Real Trajectory Components", pad=20, **title_style)
-    ax_bot_left.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
-    ax_bot_left.set_xlim(0, num_points)
-    ax_bot_left.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
+    # Twin axis for Net Error
+    ax_top_r = ax_top.twinx()
+    ax_top_r.plot(time_steps, y_norm_err, color=c_net, alpha=0.6, linestyle='--', linewidth=1.5, label='Inst. Norm Error')
+    ax_top_r.set_ylabel(r"$\mathit{Instant\ Error}$", color=c_net, **label_style)
+    ax_top_r.tick_params(axis='y', labelcolor=c_net)
+    
+    ax_top.set_title(f"Aggregate Error ({label_str})", **title_style)
+    ax_top.grid(True, linestyle=':', alpha=0.6)
+    
+    # B. Bottom Plot: Error Per Component
+    ax_bot = plt.subplot(gs[1], sharex=ax_top)
+    
+    comp_labels = ["Surge Err", "Sway Err", "YawRate Err", "YawAng Err"]
+    comp_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd'] # Standard tab10 colors
+    
+    for i in range(4):
+        ax_bot.plot(time_steps, y_comp_err[:, i], color=comp_colors[i], 
+                    linewidth=1.5, alpha=0.8, label=comp_labels[i])
+        
+    ax_bot.set_title("Error by Component", **subtitle_style)
+    ax_bot.set_ylabel(r"$\mathit{Absolute\ Error}$", **label_style)
+    ax_bot.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
+    ax_bot.grid(True, linestyle='--', alpha=0.5)
+    ax_bot.legend(loc='upper right', prop=legend_prop if 'legend_prop' in globals() else None)
 
-    for ax in [ax_top_left, ax_top_right, ax_bot_left, ax_bot_right]: _force_ticks_font(ax)
+    for ax in [ax_top, ax_top_r, ax_bot]: 
+        if '_force_ticks_font' in globals(): _force_ticks_font(ax)
 
-    if horizon_mode != ['mean'] and horizon_mode != ['max']:
-        h_str = "H_" + "_".join([str(h) for h in horizon_mode])
-    else:
-        h_str = horizon_mode[0]
-
-    if args.save_plot:
-        if mode == 'local': save_path = filename + f"_{mode}_{h_str}.png"
-        else: save_path = filename + f"_{mode}_{loop}_{h_str}.png"
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    if args.save_plot and filename:
+        plt.savefig(filename + f"_errors_{mode}_{loop}.png", dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()
-
 # ==========================================
 # PLOT 4: BOXPLOTS
 # ==========================================
-def plot_horizon_euclidean_boxplots(args, data, mode='global', loop='closed', filename=None):
-    if mode not in data: return
+def plot_kinematics_boxplots(args, data, mode='global', loop='closed', filename=None):
+    """
+    Boxplot of the error norm (4D) at each horizon step.
+    Replaces: plot_horizon_euclidean_boxplots
+    """
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
-    pred_deltas = pred_obj['pred_deltas_denorm']
-    true_deltas = data['true_deltas_denorm']
     
-    num_samples = min(pred_deltas.shape[0], true_deltas.shape[0])
-    step_errors = np.linalg.norm(true_deltas[:num_samples] - pred_deltas[:num_samples], axis=2) 
+    pred_path = pred_obj['pred_path']
+    true_path = data['true_path']
+    
+    num_samples = min(pred_path.shape[0], true_path.shape[0])
+    
+    # Calculate Norm of error vector at each step (N, H)
+    step_errors = np.linalg.norm(true_path[:num_samples] - pred_path[:num_samples], axis=2)
     
     horizon_steps = step_errors.shape[1]
     plot_data = [step_errors[:, k] for k in range(horizon_steps)]
     step_means = np.mean(step_errors, axis=0)
 
-    # Size (12, 8) to match the chunkiness of others
+    # Plot
     fig, ax = plt.subplots(figsize=(12, 8))
     
     box = ax.boxplot(plot_data, patch_artist=True, showfliers=False, widths=0.6,
-                     boxprops=dict(linewidth=2.0),
-                     whiskerprops=dict(linewidth=2.0),
-                     capprops=dict(linewidth=2.0),
-                     medianprops=dict(linewidth=2.5))
+                     medianprops=dict(linewidth=2.5, color='#000080'))
     
-    c_face = '#ADD8E6'; c_edge = '#1F77B4'; c_med = '#000080'
+    c_face, c_edge = '#ADD8E6', '#1F77B4'
     for patch in box['boxes']:
-        patch.set_facecolor(c_face); patch.set_edgecolor(c_edge); patch.set_alpha(0.7)
-    for w in box['whiskers']: w.set_color(c_edge)
-    for c in box['caps']: c.set_color(c_edge)
-    for m in box['medians']: m.set_color(c_med)
+        patch.set_facecolor(c_face)
+        patch.set_edgecolor(c_edge)
+        patch.set_alpha(0.7)
 
     x_pos = np.arange(1, horizon_steps + 1)
-    ax.plot(x_pos, step_means, marker='D', color='#D62728', linestyle='None', markersize=8, label='Average Error')
-    if mode == 'local': ax.set_title(f"Step Error Distribution (Euclidean) - {mode.capitalize()}", pad=20, **title_style)
-    else: ax.set_title(f"Step Error Distribution (Euclidean) - {mode.capitalize()} - {loop}", pad=20, **title_style)
+    ax.plot(x_pos, step_means, marker='D', color='#D62728', linestyle='None', markersize=8, label='Mean Error')
+    
+    ax.set_title(f"Horizon Error Distribution (State Norm) - {mode.capitalize()}", **title_style)
     ax.set_xlabel(r"$\mathit{Horizon\ Step}$", **label_style)
-    ax.set_ylabel(r"$\mathit{Step\ Error}$ [m]", **label_style)
-    ax.set_xticklabels([str(i) for i in x_pos])
-    ax.yaxis.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
+    ax.set_ylabel(r"$\mathit{Error\ Norm}$", **label_style)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    
+    if '_force_ticks_font' in globals(): _force_ticks_font(ax)
+    ax.legend(prop=legend_prop if 'legend_prop' in globals() else None)
 
-    leg_elems = [
-        Line2D([0], [0], color='#D62728', marker='D', linestyle='None', markersize=8, label='Mean Error'),
-        Line2D([0], [0], color=c_med, linewidth=2.5, label='Median Error')
-    ]
-    ax.legend(handles=leg_elems, loc='best', prop=legend_prop)
-    _force_ticks_font(ax)
-
-    if args.save_plot:
-        if mode == 'local': save_path = filename + f"_{mode}.png"
-        else: save_path = filename + f"_{mode}_{loop}.png"
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-
+    if args.save_plot and filename:
+        plt.savefig(filename + f"_boxplots_{mode}.png", dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()

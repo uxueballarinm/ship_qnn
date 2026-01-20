@@ -17,26 +17,26 @@ FIXED_PARAMS = {
     "window_size": 5,
     "horizon": 5,                    
     "reconstruct_val": False,         
-    "save_plot": True
+    "save_plot": True,
+    "entangle": "reverse_linear",
+    "ansatz": "efficientsu2"
 }
 
 # B. SPLIT BY FILE: 
 # A separate YAML file will be created for every combination of these.
 # The filename will be generated from these values (e.g., "ugates_circular.yml").
 SPLIT_BY_FILE = {
-    "entangle": ["full", "linear", "reverse_linear", "circular"]
+    "reps": [1, 3, 5]
 }
 
 # C. VARY WITHIN FILE:
 # These variations will be listed INSIDE each YAML file.
 # e.g., one file will contain experiments for reps=1, reps=3, reps=5.
 VARY_WITHIN_FILE = {
-    "select_features": [["dx", "dy", "wv"], ["dx", "dy", "sv"], ["dx", "dy", "yr"], ["dx", "dy", "ya"], ["dx", "dy", "vu"],["dx", "dy","radeg"],["dx", "dy","rarad"],["dx", "dy","OOD"]],
-    "reps": [1, 3, 5],
-    "ansatz": ["realamplitudes", "efficientsu2", "ugates"]
+    "select_features": [["wv", "sv", "yr", "ya", "radeg", "rarad"],["dwv", "dsv", "dyr", "dya", "radeg", "rarad"]],
 }
 
-OUTPUT_DIR = "experiment_definitions/reverse_ablation"
+OUTPUT_DIR = "experiment_definitions/delta_or_position"
 
 # ==========================================
 # 2. GENERATOR LOGIC (Do not edit below)

@@ -20,8 +20,21 @@ def run(args):
     print(f"\nDataset: N = {args.data_n} | dt = {args.data_dt} s")
 
 
-    df['delta x'] = df['Position X'].diff().fillna(0)
-    df['delta y'] = df['Position Y'].diff().fillna(0)
+    df['delta Surge Velocity'] = df['Surge Velocity'].diff().fillna(0)
+    df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
+    df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
+    df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
+    
+    control_cols = ["Rudder Angle (deg)", "Rudder Angle (rad)"] # Add whatever names you use
+    
+    for col in control_cols:
+        if col in df.columns:
+            # Shift (-1 means move next row's value to current row)
+            df[col] = df[col].shift(-1) 
+            print(f"Shifted feature '{col}' by -1 step (Predicting t using Action t)")
+
+    # 3. Drop the last row (which is now NaN because of the shift)
+    df.dropna(inplace=True)
 
     select_list = getattr(args, 'select_features', None)
     drop_list = getattr(args, 'drop_features', None)
@@ -34,8 +47,8 @@ def run(args):
 
     print(f"{len(args.features)} features selected: {args.features}")
 
-    if args.predict == "delta": args.targets = ["delta x", "delta y"]
-    else: args.targets = ["Position X", "Position Y"]
+    if args.predict == "motion": args.targets = ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
+    elif args.predict == "delta": args.targets = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"]
     feature_seqs, prediction_seqs = get_seqs(df, args.features, args.targets)
 
     # Train/test folds split indices
@@ -114,16 +127,16 @@ def run(args):
 
     
     # Local plots
-    plot_horizon_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
-    plot_horizon_euclidean_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
+    plot_kinematics_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
+    plot_kinematics_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
 
     # Global Open Plots
-    plot_trajectory_components(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_trajectory_open.png")
-    plot_errors_and_position_time(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_time_series(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_kinematics_open.png")
+    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_error_vs_time")
 
     #Global Closed Plots
-    plot_trajectory_components(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_trajectory_closed.png")
-    plot_errors_and_position_time(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_kinematics_closed.png")
+    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_error_vs_time")
     
     scalers = [x_scaler, y_scaler]
     qnn_dict = {"qc": qc, "input_params": input_params, "weight_params": weight_params}
@@ -135,20 +148,20 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
 
     # Data structure
-    parser.add_argument('--data', type=str, default="datasets\zigzag_10_40_ood_reduced_2_s.csv") #TODO: Try full dataset
+    parser.add_argument('--data', type=str, default="datasets\zigzag_11_11_ind_reduced_2_s.csv") #TODO: Try full dataset
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-select', '--select_features', type=str, nargs='+', help="Explicitly select features (e.g. --select_features px py az)")
-    group.add_argument('-drop', '--drop_features', type=str, nargs='+', help="Drop features from default set (e.g. --drop_features oz ow)")
+    group.add_argument('-select', '--select_features', type=str, nargs='+', help="Explicitly select features (e.g. --select_features wv sv yr ya)")
+    group.add_argument('-drop', '--drop_features', type=str, nargs='+', help="Drop features from default set (e.g. --drop_features rarad)")
     parser.add_argument('-ws', '--window_size', type=int, default=5, help="Window size = num qubits")
     parser.add_argument('-y', '--horizon', type=int, default=5) # 1,3,5
     parser.add_argument('-t', '--testing_fold', type=int, default=3, help="Testing fold number")
     
     # Target Options
-    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'pos'], help="Target: 'delta' (simple steps) or 'pos' (absolute position)")
+    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'motion'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
     parser.add_argument('--norm', type = str2bool, default=True, choices = [True, False], help="Normalize targets to [-1, 1]") # Don't normalize NOTE maybe normalize for a classical layer that goes before the redout if we add 
     parser.add_argument('-rt', '--reconstruct_train', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
     parser.add_argument('-rv', '--reconstruct_val', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
-    # parser.add_argument('--plot', type=str, default='short', choices=['short', 'long'], help="Plot 'short' (based on previous true position) or 'long' (cumulative) prediction")
+    # parser.add_argument('--plot', type=str, default='short', choices=['short', 'long'], help="Plot 'short' (based on previous true kinematic variables) or 'long' (cumulative) prediction")
 
     # QNN model
     # parser.add_argument('--map', type = str,choices = ['True', 'False'], default=False)   
