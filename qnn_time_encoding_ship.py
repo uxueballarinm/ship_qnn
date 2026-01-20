@@ -150,7 +150,7 @@ if __name__=="__main__":
     # Data structure
     parser.add_argument('--data', type=str, default="datasets\zigzag_11_11_ind_reduced_2_s.csv") #TODO: Try full dataset
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-select', '--select_features', type=str, nargs='+', help="Explicitly select features (e.g. --select_features wv sv yr ya)")
+    group.add_argument('-select', '--select_features', type=str, default=['dwv','dsvdyr','dya','rarad'], nargs='+', help="Explicitly select features (e.g. --select_features wv sv yr ya)")
     group.add_argument('-drop', '--drop_features', type=str, nargs='+', help="Drop features from default set (e.g. --drop_features rarad)")
     parser.add_argument('-ws', '--window_size', type=int, default=5, help="Window size = num qubits")
     parser.add_argument('-y', '--horizon', type=int, default=5) # 1,3,5

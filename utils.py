@@ -19,7 +19,7 @@ from matplotlib.lines import Line2D
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import r2_score, mean_squared_error,mean_absolute_error
+from sklearn.metrics import r2_score, mean_squared_error
 
 import torch
 import torch.nn as nn
@@ -35,60 +35,58 @@ from qiskit.transpiler import generate_preset_pass_manager
 from qiskit_machine_learning.neural_networks import EstimatorQNN
 from qiskit_algorithms.optimizers import SPSA, COBYLA
 
+# ANSI Color Codes for Terminal Output
+C_RED = '\033[91m'
+C_YELLOW = '\033[93m'
+C_GREEN = '\033[92m'
+C_BLUE = '\033[94m'
+C_RESET = '\033[0m'
+
 colors = ['#E60000', '#FF8C00', '#C71585', '#008080', '#1E90FF']
 #"Position X", "Position Y",
-full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)", "OOD Label"]
+full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)"]#, "OOD Label"]
 
+
+# ==============================================================================
+# 1. DATA & UTILITY FUNCTIONS
+# ==============================================================================
 
 def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+    if isinstance(v, bool): return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'): return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'): return False
+    else: raise argparse.ArgumentTypeError('Boolean value expected.')
+
 
 def map_names(feature_list, reverse=False):
-    """
-    Maps between short codes (e.g., 'px') and full feature names (e.g., 'Position X').
-    Args:
-        feature_list (list): List of strings (codes or full names).
-        to_short (bool): If True, converts Full Names -> Codes (for logging).
-                         If False, converts Codes -> Full Names (for data loading).
-    """
+    """Maps between short codes (wv) and full names (Surge Velocity)."""
     # Central Dictionary
     code_to_name = {
-        #"px": "Position X", "py": "Position Y",
         "wv":"Surge Velocity", "sv":"Sway Velocity", 
         "yr":"Yaw Rate", "ya":"Yaw Angle",
         "vu": "Speed U", "radeg": "Rudder Angle (deg)",
         "rarad": "Rudder Angle (rad)", "OOD": "OOD Label",
         "dwv":"delta Surge Velocity", "dsv":"delta Sway Velocity",
         "dyr":"delta Yaw Rate", "dya":"delta Yaw Angle",
-        #"dx": "delta x", "dy": "delta y"
+        # Ansatz
+        "effsu2": "efficientsu2", "ugates": "ugates", "realamplitudes": "realamp",
+        # Entanglement
+        "lin": "linear", "rev": "reverse_linear", "circ": "circular", "full": "full", "pair": "pairwise", "sca": "sca"
     }
 
-    if reverse: # (Name -> Code)
+    if reverse:
         name_to_code = {v: k for k, v in code_to_name.items()}
         return [name_to_code.get(f, f) for f in feature_list]
     
-    else: # (Code -> Name)
+    else: 
         columns = []
         for code in feature_list:
-            if code in code_to_name:
-                columns.append(code_to_name[code])
-            elif code in code_to_name.values():
-                columns.append(code) # Already a full name
-            else:
-                raise ValueError(f"Unknown feature code: '{code}'. Available: {list(code_to_name.keys())}")
+            if code in code_to_name:columns.append(code_to_name[code])
+            elif code in code_to_name.values():columns.append(code) 
+            else: raise ValueError(f"Unknown feature code: '{code}'. Available: {list(code_to_name.keys())}")
         return columns
-
 def get_seqs(df, feature_columns_used, prediction_columns_used):
-    feature_seqs = df[feature_columns_used].to_numpy()
-    prediction_seqs = df[prediction_columns_used].to_numpy()
-    return feature_seqs, prediction_seqs
+    return df[feature_columns_used].to_numpy(), df[prediction_columns_used].to_numpy()
 
 def get_fold_indices(total_length, num_folds=4):
     fold_size = math.ceil(total_length / num_folds)
@@ -96,8 +94,7 @@ def get_fold_indices(total_length, num_folds=4):
     for i in range(1, num_folds):
         next_idx = min(fold_size * i, total_length)
         split_indices.append(next_idx)
-    # Ensure the last index is exactly the total length
-    if split_indices[-1] != total_length:
+    if split_indices[-1] != total_length: # Ensure the last index is exactly the total length
         split_indices.append(total_length)
     return split_indices
 
@@ -105,84 +102,134 @@ def make_sliding_window_ycustom_folds(x, y, window_size, horizon_size, num_folds
 
     split_indices = get_fold_indices(len(x), num_folds)
     
-    x_data_folds = []
-    y_data_folds = []
+    x_data_folds, y_data_folds = [], []
 
     for k in range(num_folds):
-        fold_x_data = []
-        fold_y_data = []
+        fold_x, fold_y = [], []
         
-        start_idx = split_indices[k]
-        end_idx = split_indices[k+1]
+        start_idx, end_idx = split_indices[k], split_indices[k+1]
         
         for i in range(start_idx, end_idx):
             if i + window_size + horizon_size <= end_idx:
-                fold_x_data.append(x[i : i + window_size])
-                # if cumulative_deltas: fold_y_data.append(np.cumsum(y[i + window_size : i + window_size + horizon_size]))
-                fold_y_data.append(y[i + window_size : i + window_size + horizon_size])
-            else:
-                # Skip windows crossing fold boundaries
-                pass
+                fold_x.append(x[i : i + window_size])
+                fold_y.append(y[i + window_size : i + window_size + horizon_size])
                 
-        x_data_folds.append(np.array(fold_x_data))
-        y_data_folds.append(np.array(fold_y_data))
+        x_data_folds.append(np.array(fold_x))
+        y_data_folds.append(np.array(fold_y))
         
     return x_data_folds, y_data_folds
 
-
-# CIRCUIT CONSTRUCTION
-# ------------------------------------------------------------------------------------------------------------------------------------------------
-
-def get_params_for_gates(chunk_idx, num_features, input_params, base_idx, rep_indices):
-    """Helper to fetch 3 parameters for a U-gate, handling padding."""
+# ==============================================================================
+# 2. CIRCUIT CONSTRUCTION
+# ==============================================================================
+def _parse_feature_map(map_input, selected_features):
+    """Parses mixed tokens (int strings, feature codes) into integers."""
+    if map_input is None: return None
+    indices = []
+    feat_to_idx = {name: i for i, name in enumerate(selected_features)}
+    for item in map_input:
+        try: # Try treating as integer (for indices or -1)
+            val = int(item)
+            indices.append(val)
+        except ValueError: # Treat as Feature Code (e.g. 'px')
+            full_name_list = map_names([item])
+            if not full_name_list: raise ValueError(f"Unknown code: {item}")
+            full_name = full_name_list[0]
+            if full_name in feat_to_idx: indices.append(feat_to_idx[full_name])
+            else: raise ValueError(f"Feature '{item}' ({full_name}) in map but NOT in selected features: {selected_features}")
+    return indices
+def _validate_chunk_completeness(chunk, num_features, layer_idx=None):
+    """Validates that a layer contains exactly one instance of every feature."""
+    valid = [x for x in chunk if x != -1]
+    context = f"Layer {layer_idx}" if layer_idx is not None else "Template"
+    
+    if len(valid) != len(set(valid)):
+        raise ValueError(f"[ERROR] [Map] Found duplicate features in {context}. Segment: {chunk}")
+    if set(valid) != set(range(num_features)):
+        raise ValueError(f"[ERROR] [Map] Missing or extra features in {context}. Segment: {chunk}")
+    
+def _load_and_validate_map(args, config):
+    """Main processor for feature map parsing and validation."""
+    reorder_active = getattr(args, 'reorder', True)
+    num_padding = config["total_slots"] - config["num_features"]
+    canonical_map = np.concatenate([np.arange(config["num_features"]), np.full(num_padding, -1)]).astype(int)
+    raw_map = getattr(args, 'map', None)
+    if reorder_active or raw_map is None:
+        if raw_map is not None:
+            print(f"{C_YELLOW}WARNING: Feature 'reorder' is active --> Ignoring custom input 'map'.{C_RESET}")
+        return canonical_map, None
+    flat_indices = _parse_feature_map(raw_map, args.features)
+    n_slots, n_reps = config["total_slots"], args.reps
+    
+    if len(flat_indices) == n_slots:
+        _validate_chunk_completeness(flat_indices, config["num_features"])
+        return np.array(flat_indices, dtype=int), None
+    elif len(flat_indices) == n_slots * n_reps:
+        matrix = np.array(flat_indices, dtype=int).reshape(n_reps, n_slots)
+        for i in range(n_reps): _validate_chunk_completeness(matrix[i], config["num_features"], layer_idx=i)
+        return None, matrix
+    else:
+        raise ValueError(f"[ERROR] [Map] Invalid map length ({len(flat_indices)}). Expected {n_slots} or {n_slots * n_reps}.")
+def _get_encoding_config(args):
+    """Calculates circuit dimensions."""
+    num_features = len(args.features)
+    num_ugates = math.ceil(num_features / 3)
+    total_slots = num_ugates * 3
+    if args.encoding == 'compact':
+        qubits_per_step, num_qubits, sub_layers = 1, args.window_size, 1
+    elif args.encoding == 'parallel':
+        qubits_per_step, num_qubits, sub_layers = num_ugates, args.window_size * num_ugates, 1
+    elif args.encoding == 'serial':
+        qubits_per_step, num_qubits, sub_layers = 1, args.window_size, num_ugates
+    
+    return {
+        "num_features": num_features,
+        "num_ugates": num_ugates,
+        "total_slots": total_slots,
+        "strategy": args.encoding,
+        "num_qubits": num_qubits,
+        "total_physical_layers": args.reps * sub_layers,
+        "qubits_per_step": qubits_per_step,
+        "weights_per_layer": 0
+    }
+def _get_params_for_gates(chunk_idx, num_features, input_params, base_idx, rep_indices):
+    """Fetches parameters for a U-gate, handling padding."""
     p = []
     for k in range(3):
-        feat_ptr = chunk_idx * 3 + k
-        if feat_ptr < num_features:
-            real_feat_idx = rep_indices[feat_ptr]
-            p.append(input_params[base_idx + real_feat_idx])
-        else:
-            p.append(0.0)
+        slot_idx = chunk_idx * 3 + k # Calculate exactly which slot in the layer map we are accessing
+       
+        feat_idx = rep_indices[slot_idx]  # Get the feature index mapped to this slot
+        if feat_idx != -1: p.append(input_params[base_idx + feat_idx]) # Valid feature: Read from input parameters
+        else: p.append(0.0) # Sentinel -1: Padding/Empty slot -> 0.0 angle
     return p
 
-def apply_entanglement(qc, num_qubits, strategy='circular', layer_index=0):
+def _apply_entanglement(qc, num_qubits, strategy='circular', layer_index=0):
+    """Entanglement strategies."""
     if num_qubits < 2: return
     if strategy == 'linear':
-        for i in range(num_qubits - 1): 
-            qc.cx(i, i + 1)
+        for i in range(num_qubits - 1): qc.cx(i, i + 1)
     elif strategy == 'reverse_linear':
-        for i in range(num_qubits - 1, 0, -1): 
-            qc.cx(i, i - 1)
+        for i in range(num_qubits - 1, 0, -1): qc.cx(i, i - 1)
     elif strategy == 'circular':
-        for i in range(num_qubits): 
-            qc.cx(i, (i + 1) % num_qubits) 
+        for i in range(num_qubits): qc.cx(i, (i + 1) % num_qubits) 
     elif strategy == 'full':
         for i in range(num_qubits):
-            for j in range(i + 1, num_qubits): 
-                qc.cx(i, j)     
-    elif strategy == 'pairwise':  # <--- Renamed from previous 'sca'
-        for i in range(0, num_qubits - 1, 2): # Layer 1: Even pairs (0-1, 2-3...)
-            qc.cx(i, i + 1)
-        for i in range(1, num_qubits - 1, 2): # Layer 2: Odd pairs (1-2, 3-4...)
-            qc.cx(i, i + 1)
-    elif strategy == 'sca': # <--- True SCA implementation
-        # Shifted Circular Alternating requires a shift based on layer_index
+            for j in range(i + 1, num_qubits): qc.cx(i, j)     
+    elif strategy == 'pairwise':  
+        for i in range(0, num_qubits - 1, 2): qc.cx(i, i + 1) # Layer 1: Even pairs (0-1, 2-3...)
+        for i in range(1, num_qubits - 1, 2): qc.cx(i, i + 1)# Layer 2: Odd pairs (1-2, 3-4...)
+    elif strategy == 'sca': 
         shift = layer_index % num_qubits # Connect i to i+1, but shifted by the layer index
-        for i in range(num_qubits):
-            control = (i + shift) % num_qubits
-            target = (i + shift + 1) % num_qubits
-            qc.cx(control, target)
+        for i in range(num_qubits): qc.cx((i + shift) % num_qubits, (i + shift + 1) % num_qubits)
     else: 
-        raise ValueError(f"Unknown entanglement strategy: {strategy}")
+        raise ValueError(f"[ERROR] [Circuit] Unknown entanglement strategy: '{strategy}'")
 
-def append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, weights_per_layer, layer_idx):
-    """Applies Entanglement + Ansatz (Common to all strategies)."""
-    
-    # 1. Entanglement
-    apply_entanglement(qc, qc.num_qubits, strategy=args.entangle, layer_index=layer_idx)
+def _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, weights_per_layer, layer_idx):
+    """Adds entanglement and trainable ansatz."""
+    _apply_entanglement(qc, qc.num_qubits, strategy=args.entangle, layer_index=layer_idx)
 
     # 2. Ansatz (Trainable Weights)
-    if args.ansatz == 'ugates': #TODO: Try different encodings (i.e. one qubit for every 3 features instead of consecutive ugates, or 3 features in each layer)
+    if args.ansatz == 'ugates':
         for q in range(qc.num_qubits):  
             w1, w2, w3 = weight_params[weight_idx:weight_idx+3]
             qc.u(w1, w2, w3, q)
@@ -195,105 +242,42 @@ def append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, 
     
     return weight_idx
 
-# --- STRATEGY 1: COMPACT (Stacked Gates) ---
+# --- Block Builders ---
 def _build_compact_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
-    """
-    Encodes all features in 1 physical layer by stacking U-gates on the same qubit.
-    Structure: [U(f1-3) -> U(f4-6)...] -> Entangle -> Ansatz
-    """
-    # 1. Encoding (Stack all chunks)
+
     for t in range(args.window_size):
         base_idx = t * config["num_features"]
         for chunk_idx in range(config["num_ugates"]):
-            p = get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
-            qc.u(p[0], p[1], p[2], t) # Always qubit 't'
+            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
+            qc.u(p[0], p[1], p[2], t) 
 
-    # 2. Entangle + Ansatz (Once per rep)
-    weight_idx = append_ansatz_and_entangle(
-        qc, args, weight_params, weight_idx, ansatz_obj, 
-        config["weights_per_layer"], current_layer
-    )
-    return weight_idx, current_layer + 1
+    return _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer), current_layer + 1
 
-# --- STRATEGY 2: PARALLEL (Wider Circuit) ---
 def _build_parallel_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
-    """
-    Encodes all features in 1 physical layer by using auxiliary qubits.
-    Structure: [Q0: U(f1-3), Q1: U(f4-6)...] -> Entangle -> Ansatz
-    """
-    # 1. Encoding (Spread across width)
+    
     for t in range(args.window_size):
         base_idx = t * config["num_features"]
         for chunk_idx in range(config["num_ugates"]):
-            p = get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
-            
-            # Map timestep + chunk to specific qubit
+            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
             target_qubit = (t * config["qubits_per_step"]) + chunk_idx
             qc.u(p[0], p[1], p[2], target_qubit)
-
-    # 2. Entangle + Ansatz (Once per rep)
-    weight_idx = append_ansatz_and_entangle(
-        qc, args, weight_params, weight_idx, ansatz_obj, 
-        config["weights_per_layer"], current_layer
-    )
-    return weight_idx, current_layer + 1
+    return _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer), current_layer + 1
 
 # --- STRATEGY 3: SERIAL (Deeper Circuit) ---
 def _build_serial_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
-    """
-    Encodes features across multiple physical layers.
-    Structure: Layer A [U(f1-3)] -> Ent/Ans -> Layer B [U(f4-6)] -> Ent/Ans
-    """
-    # Iterate through each "Chunk" (set of 3 features) creating a new physical layer for each
     for s in range(config["num_ugates"]):
-        
-        # 1. Encoding (Only chunk 's')
         for t in range(args.window_size):
             base_idx = t * config["num_features"]
-            p = get_params_for_gates(s, config["num_features"], input_params, base_idx, rep_indices)
+            p = _get_params_for_gates(s, config["num_features"], input_params, base_idx, rep_indices)
             qc.u(p[0], p[1], p[2], t)
-
-        # 2. Entangle + Ansatz (Happens AFTER EACH partial encoding)
-        weight_idx = append_ansatz_and_entangle(
-            qc, args, weight_params, weight_idx, ansatz_obj, 
-            config["weights_per_layer"], current_layer
-        )
+        weight_idx = _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer)
         current_layer += 1
-        
     return weight_idx, current_layer
-
-def get_encoding_config(args):
-
-    """Calculates dimensions based on strategy."""
-    num_features = len(args.features)
-    num_ugates = math.ceil(num_features / 3)
-
-    if args.encoding == 'compact': # STANDARD: Standard width, stacked ugates in one layer
-        qubits_per_step = 1
-        num_qubits = args.window_size
-        sub_layers_per_rep = 1
-    elif args.encoding == 'parallel': # WIDER: Each timestep uses 'num_ugates' qubits
-        qubits_per_step = num_ugates
-        num_qubits = args.window_size * qubits_per_step
-        sub_layers_per_rep = 1
-    elif args.encoding == 'serial': # DEEPER: Standard width, but split encoding into multiple layers
-        qubits_per_step = 1
-        num_qubits = args.window_size
-        sub_layers_per_rep = num_ugates
-        
-    return {
-        "num_features": num_features,
-        "num_ugates": num_ugates,
-        "strategy": args.encoding,
-        "num_qubits": num_qubits,
-        "total_physical_layers": args.reps * sub_layers_per_rep,
-        "qubits_per_step": qubits_per_step
-    }
 
 def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers have any effect
 
     # 1. Setup
-    config = get_encoding_config(args)
+    config = _get_encoding_config(args)
     
     # 2. Ansatz Object Init
     if args.ansatz == 'ugates': 
@@ -305,41 +289,49 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
     elif args.ansatz == 'realamplitudes': 
         ansatz_obj = RealAmplitudes(num_qubits=config["num_qubits"], reps=0)
         config["weights_per_layer"] = len(ansatz_obj.parameters)
-
     qc = QuantumCircuit(config["num_qubits"])
     input_params = ParameterVector('θ', args.window_size * config["num_features"])
     weight_params = ParameterVector('ω', config["total_physical_layers"] * config["weights_per_layer"])
-    
     rng = np.random.default_rng(args.run)
     weight_idx = 0
     current_physical_layer = 0
-    rep_indices = np.arange(config["num_features"])
-
+    # Map processing
+    rep_indices, per_layer_orders = _load_and_validate_map(args, config)
+    full_map_history = []
     for r in range(args.reps):
-
+        # Select Indices
+        if per_layer_orders is not None: current_indices = per_layer_orders[r]
+        else: current_indices = rep_indices
+        # 2. Shuffle
+        if args.reorder: current_indices = rng.permutation(current_indices)
+        
+        # 3. Record
+        full_map_history.extend(current_indices.tolist())
+        
+        # 4. Build
         if config["strategy"] == 'compact':
             weight_idx, current_physical_layer = _build_compact_block(
-                qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
             )
         elif config["strategy"] == 'serial':
             weight_idx, current_physical_layer = _build_serial_block(
-                qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
             )
         elif config["strategy"] == 'parallel':
             weight_idx, current_physical_layer = _build_parallel_block(
-                qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
             )
         
         if barriers: qc.barrier()
-
-        if args.reorder: 
-            rep_indices = rng.permutation(rep_indices)
+        if per_layer_orders is None: rep_indices = current_indices
+    args.map = full_map_history
 
     return qc, input_params, weight_params
 
 
-# MODEL DEFINITIONS
-# ------------------------------------------------------------------------------------------------------------------------------------------------
+# ==============================================================================
+# 4. MODEL DEFINITIONS & TRAINING
+# ==============================================================================
 
 class WindowEncodingQNN: # Numpy version
 
@@ -353,12 +345,10 @@ class WindowEncodingQNN: # Numpy version
         self.output_dim = self.horizon*self.columns
         self.num_c_params = (self.input_dim * self.output_dim) + self.output_dim # Classical Linear Readout Layer: Weights matrix (Inputs*Outputs) + Bias (Outputs)
         self.total_params = self.num_q_params + self.num_c_params
-        print(f"Model Init: {self.input_dim} Qubits. Params: {self.num_q_params} (Q) + {self.num_c_params} (C)")
+        print(f"[Model] Qubits: {self.input_dim} | Params: {self.num_q_params} (Q) + {self.num_c_params} (C)")        
         if seed is not None: self.rng = np.random.default_rng(seed)
 
-    def forward(self, x, params_flat): # Forward: Input -> QNN  -> Measure All Z -> Linear Layer (W*x + b) -> Output
-        
-        # QNN layer
+    def forward(self, x, params_flat):
         q_params = params_flat[:self.num_q_params]
         x_flat = x.reshape(x.shape[0], -1)
         y = self.qnn.forward(x_flat, q_params)
@@ -379,18 +369,13 @@ class WindowEncodingQNN: # Numpy version
         return np.concatenate([q_params, c_params])
 
 class ClassicalLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size, seed=42):
+    def __init__(self, input_size, hidden_size, num_layers, output_size = None, seed=42):
         super().__init__()
         torch.manual_seed(seed)
         
         # LSTM Layer
         # input_shape: (Batch, Seq_Len, Features)
-        self.lstm = nn.LSTM(
-            input_size=input_size, 
-            hidden_size=hidden_size, 
-            num_layers=num_layers, 
-            batch_first=True
-        )
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Readout Layer
         self.fc = nn.Linear(hidden_size, output_size,device=self.device)
@@ -417,8 +402,7 @@ class ClassicalWrapper:
         self.model.to(self.device)
         self.model.eval()
         t_x = torch.tensor(x, dtype=torch.float32).to(self.device)
-        with torch.no_grad():
-            out = self.model(t_x)
+        with torch.no_grad(): out = self.model(t_x)
         total_out = out.shape[1]
         horizon = total_out // self.num_targets
         
@@ -428,7 +412,7 @@ class ClassicalWrapper:
 # TRAIN AND EVALUATE MODEL
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 
-def compute_loss(args, pred, target, reconstruct, scaler=None):
+def _compute_loss(args, pred, target, reconstruct, scaler=None):
     num_targets = target.shape[-1]
     
     if reconstruct and scaler:
@@ -444,7 +428,7 @@ def compute_loss(args, pred, target, reconstruct, scaler=None):
         else: return np.mean((pred_real - target_real) ** 2)
 
     else:
-        if reconstruct and not scaler: print('Warning: Scaler was not provided and trajectory could not be reconstructed.')
+        if reconstruct and not scaler: print(f'{C_YELLOW}WARNING: Scaler missing --> Cannot reconstruct trajectory.{C_RESET}')
         return np.mean((pred - target) ** 2)
 
 def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
@@ -452,55 +436,45 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     best_val_loss = float('inf')
     best_params = None
     
-    train_history = []
-    val_history = []
-
+    train_history, val_history = [], []
     def objective_function(params):
         nonlocal best_val_loss, best_params
 
         preds = model.forward(x_train, params)
-        train_mse = compute_loss(args, preds, y_train, args.reconstruct_train, scaler)
+        train_mse = _compute_loss(args, preds, y_train, args.reconstruct_train, scaler)
 
         val_preds = model.forward(x_val, params)
-        val_mse = compute_loss(args, val_preds, y_val, args.reconstruct_val, scaler)
+        val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, scaler)
         
-        train_history.append(train_mse)
-        val_history.append(val_mse)
+        train_history.append(train_mse); val_history.append(val_mse)
         if val_mse < best_val_loss:
             best_val_loss = val_mse
             best_params = np.copy(params) #NOTE: Usually final weights are better
             
         if len(train_history) % 50 == 0:
-            print(f"Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
+           print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
             
         return train_mse
 
     start_time = time.time()
-    print(f"\nStarting {args.optimizer.upper()} optimization...")
+    print(f"\n[Training] Starting {args.optimizer.upper()} optimization...")
     initial_weights = model.initialize_parameters(args.initialization)
 
     if args.optimizer.upper() == 'COBYLA':
-        opt = COBYLA(maxiter=args.maxiter,tol = None) #TODO: Add tolerance
+        opt = COBYLA(maxiter=args.maxiter, tol = None)
         res = opt.minimize(fun=objective_function, x0=initial_weights)
-
     elif args.optimizer.upper() == 'SPSA':
-        opt = SPSA(maxiter=args.maxiter) #TODO: Add learning_rate and perturbation
+        opt = SPSA(maxiter=args.maxiter) 
         res = opt.minimize(fun=objective_function, x0=initial_weights)
-
-    elapsed_time = (time.time() - start_time) / 60
-    print(f"Training completed in {elapsed_time:.2f} min.")
+    print(f"Training completed in {(time.time() - start_time) / 60:.2f} min.")
 
     return {
-        "best_weights": best_params,
-        "best_val_loss": best_val_loss,     
-        "final_weights": res.x,             
-        "train_history": train_history,     
-        "val_history": val_history,         
-        "nfev": res.nfev if hasattr(res, 'nfev') else len(train_history)
+        "best_weights": best_params, "best_val_loss": best_val_loss, "final_weights": res.x,             
+        "train_history": train_history, "val_history": val_history,         
     }
 
 
-def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler = None,device='cpu'):
+def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler = None, device='cpu'):
     """
     Standard PyTorch training loop with Adam optimizer.
     """
@@ -512,12 +486,8 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
     t_y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
     t_x_val = torch.tensor(x_val, dtype=torch.float32).to(device)
     t_y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
-
-    train_ds = TensorDataset(t_x_train, t_y_train)
-    val_ds = TensorDataset(t_x_val, t_y_val)
-
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(TensorDataset(t_x_train, t_y_train), batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(TensorDataset(t_x_val, t_y_val), batch_size=batch_size, shuffle=False)
 
     # 2. Setup Training
     model = model.to(device)
@@ -529,14 +499,13 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
 
     best_val_loss = float('inf')
     best_weights = None
-    train_history = []
-    val_history = []
+    train_history, val_history = [], []
     
     # Early stopping config
     patience = getattr(args, 'patience', 20)
     counter = 0
     
-    print(f"\n--- Starting Classical Optimization (Adam) on {device} ---")
+    print(f"\n[Training] Starting Classical Optimization (Adam) on {device}...")
     start_time = time.time()
     for epoch in range(args.maxiter): # 'maxiter' acts as 'epochs' here
         model.train()
@@ -544,14 +513,12 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         
         for x_batch, y_batch in train_loader:
             # Forward
-            x_batch,y_batch = x_batch.to(device),y_batch.to(device)
+            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
             preds = model(x_batch)
             loss = criterion(preds, y_batch)
             
             # Backward
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            optimizer.zero_grad(); loss.backward(); optimizer.step()
             
             epoch_loss += loss.item()
             
@@ -568,7 +535,7 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
                 val_preds = model(x_v)
                 v_p_np = val_preds.cpu().numpy().reshape(-1, args.horizon, num_targets)
                 v_y_np = y_v.cpu().numpy().reshape(-1, args.horizon, num_targets)                
-                batch_loss = compute_loss(args, v_p_np, v_y_np, args.reconstruct_val, y_scaler) 
+                batch_loss = _compute_loss(args, v_p_np, v_y_np, args.reconstruct_val, y_scaler) 
                 val_loss_accum += batch_loss * x_v.size(0)
                 total_samples += x_v.size(0)
         
@@ -577,7 +544,7 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
 
         # Logging
         if (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch+1:4d} | Train MSE: {avg_train_loss:.6f} | Val MSE: {avg_val_loss:.6f}")
+            print(f"[Training] Epoch {epoch+1:4d} | Train MSE: {avg_train_loss:.6f} | Val MSE: {avg_val_loss:.6f}")
 
         # Save Best Model Logic
         if avg_val_loss < best_val_loss:
@@ -591,132 +558,154 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         if counter >= patience:
             print(f"Early stopping triggered at epoch {epoch+1}")
             break
-
-    total_time = (time.time() - start_time) / 60
-    print(f"Classical training finished in {total_time:.2f} min.")
-    
-    # IMPORTANT: Unlike QNN which returns a flat array, PyTorch returns a state_dict.
-    # We must return it in a format compatible with your evaluation functions.
-    # But since your eval functions expect `model.forward(x, params)`, 
-    # we need a wrapper for inference later or just load weights into the model object now.
-    
-    # Reload best weights into the model for final state
-    if best_weights is not None:
-        model.load_state_dict(best_weights)
-    
-    # Return results dictionary
+    print(f"Classical training finished in {(time.time() - start_time) / 60:.2f} min.")
+    if best_weights is not None: model.load_state_dict(best_weights)
     return {
-        "best_weights": best_weights, 
-        "final_weights": model.state_dict(),
-        "best_val_loss": best_val_loss,
-        "train_history": train_history,
-        "val_history": val_history,
-        "nfev": epoch + 1
+        "best_weights": best_weights, "final_weights": model.state_dict(),"best_val_loss": best_val_loss,
+        "train_history": train_history,"val_history": val_history,
     }
 
-
+# ==============================================================================
+# 5. RECURSIVE EVALUATION & PLOTTING (PUBLIC)
+# ==============================================================================
 def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
     """
-    Performs Recursive 'Fan' Prediction for N targets (Generic).
-    Supports two modes:
-      1. 'motion': Model predicts absolute values -> Direct Feedback.
-      2. 'delta':  Model predicts changes -> Integration Feedback (New = Old + Pred).
+    Performs Recursive 'Fan' Prediction with Automatic Physics Logic.
+    Handles 4 update modes based on Target vs. Feature names.
     """
     
     # 1. Setup
-    num_samples = x_test.shape[0] # N
-    horizon = args.horizon        # H
+    num_samples = x_test.shape[0] 
+    horizon = args.horizon        
     num_targets = len(args.targets)
 
+    # 2. Physics Mapping & Initialization
+    last_pred_real = np.zeros(num_targets) 
+    update_rules = {} 
 
-    # 2. Map Targets to Feature Indices (for feedback)
-    # We need to know: Output #0 corresponds to Input Feature #X?
-    target_to_feature_idx = {}
-    # Determine integration mode based on args
-    is_delta_mode = (args.predict == 'delta')
-    mode_label = "Integration (Delta)" if is_delta_mode else "Direct (Motion)"
-
-    print(f"\n  {'Target Output':<20} | {'Input Feature':<20} | {'Feedback Mode'}")
-    print(f"  {'-'*20}-+-{'-'*20}-+-{'-'*20}")
+    # Lists for logging
+    direct_updates = []
+    physics_updates = []
     
     for t_idx, t_name in enumerate(args.targets):
-        # If we predict 'delta', the target name usually matches the feature name 
-        # (e.g. we predict 'Surge Velocity' change, to update 'Surge Velocity' feature)
-        # Note: If your target names are explicitly "Delta Surge", you might need a mapping dictionary here.
-        # Assuming args.targets contains names that exist in args.features:
+        
+        # A. Identify if Target is 'Delta' type
+        is_target_delta = "delta" in t_name.lower() or args.predict == 'delta'
+        
+        # B. Find Matching Feature
+        match_name = None
         if t_name in args.features:
-            f_idx = args.features.index(t_name)
-            target_to_feature_idx[t_idx] = f_idx
-            print(f"  {t_name:<20} | {t_name:<20} | ✅ {mode_label}")
+            match_name = t_name
+        
+        if match_name is None:
+            if is_target_delta: 
+                # Target is 'delta X', look for 'X'
+                clean = t_name.replace("delta ", "").strip()
+                if clean in args.features: match_name = clean
+            else:
+                # Target is 'X', look for 'delta X'
+                delta_ver = f"delta {t_name}"
+                if delta_ver in args.features: match_name = delta_ver
+
+        # C. Determine Logic
+        if match_name:
+            f_idx = args.features.index(match_name)
+            is_feature_delta = "delta" in match_name.lower()
+
+            mode = "UNKNOWN"
+            if not is_target_delta and not is_feature_delta:
+                mode = "DIRECT"        
+                direct_updates.append(f"Pred [{t_name}] -> Replaces [{match_name}]")
+            elif is_target_delta and not is_feature_delta:
+                mode = "INTEGRATE"     
+                physics_updates.append(f"Pred [{t_name}] -> Integrates to update [{match_name}]")
+            elif is_target_delta and is_feature_delta:
+                mode = "DIRECT_DELTA"  
+                direct_updates.append(f"Pred [{t_name}] -> Replaces [{match_name}]")
+            elif not is_target_delta and is_feature_delta:
+                mode = "DIFF"          
+                physics_updates.append(f"Pred [{t_name}] -> Differentiates to update [{match_name}]")
+
+            update_rules[t_idx] = (f_idx, mode)
+            
         else:
-            print(f"  {t_name:<20} | {'None':<20} | ⚠️ Open-Loop")
+            pass
 
-    recursive_ratio = len(target_to_feature_idx) / len(args.targets) if args.targets else 0.0
-
-    if not target_to_feature_idx:
-        print("  > [Warning] No autoregressive targets found. Using Open-Loop.")
-        return model.forward(x_test, best_params), 0.0
+    # --- PRINT SUMMARY ---
+    num_driven = len(update_rules)
+    
+    if num_driven == 0:
+        print(f"  > {C_YELLOW}Fully Open-Loop (No recursion).{C_RESET}")
+    else:
+        print(f"  > Recursive Loop Active ({num_driven} targets driving input features)")
+        if direct_updates:
+            print(f"    Direct Feedback:  {', '.join(direct_updates)}")
+        if physics_updates:
+            print(f"    Physics Feedback: {', '.join(physics_updates)}")
 
     # 3. Initialization
-    # Initialize with the very first window
-    curr_window = x_test[0:1, :, :] 
-    
-    # Track the "Real Physics" state of the last step to support integration
-    # Shape (1, F)
-    last_step_real = x_scaler.inverse_transform(curr_window[:, -1, :])
-
-    # Output Container
     recursive_preds = np.zeros((num_samples, horizon, num_targets))
+    
+    # Optimization: If open loop, just run forward once
+    if num_driven == 0:
+        preds_full = model.forward(x_test, best_params)
+        return preds_full, 0.0
 
+    curr_window = x_test[0:1, :, :] 
+    last_feat_real = x_scaler.inverse_transform(curr_window[:, -1, :]) # (1, F)
+    
     # 4. Main Loop
     for i in range(num_samples):
         
-        # A. Predict Full Horizon
-        # model.forward returns (1, H, 2). We keep ALL of it.
-        preds_full = model.forward(curr_window, best_params) # Shape (1, H, 2)
+        # A. Predict
+        preds_full = model.forward(curr_window, best_params) # (1, H, T)
         recursive_preds[i] = preds_full[0]
-        # B. Recursion: Prepare Next Window
-        # We need to construct the input for t+1. 
-        # Start by grabbing the Ground Truth (GT) for t+1 to fill in auxiliary features (like Rudder, RPM)
+
+        # B. Recursion Setup
         next_gt_idx = min(i + 1, num_samples - 1)
         next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] 
         
-        # Denormalize everything to work in Physics Space
+        # Denormalize
         next_input_real = x_scaler.inverse_transform(next_gt_features_norm) # (1, F)
         
-        # Get the immediate next prediction (step 0 of horizon)
+        # Get immediate prediction
         pred_next_step_norm = preds_full[:, 0, :]
         if y_scaler:
-            pred_step_real = y_scaler.inverse_transform(pred_next_step_norm) # (1, T)
+            pred_step_real = y_scaler.inverse_transform(pred_next_step_norm) 
         else:
             pred_step_real = pred_next_step_norm
             
-        # C. Update the features that are driven by the model
-        for t_idx, f_idx in target_to_feature_idx.items():
+        # C. Update Loop
+        for t_idx, (f_idx, mode) in update_rules.items():
             pred_val = pred_step_real[0, t_idx]
             
-            if is_delta_mode:
-                # INTEGRATION LOGIC: New State = Old State + Prediction
-                # We use 'last_step_real' which holds the *simulated* state from the previous iteration
-                new_val = last_step_real[0, f_idx] + pred_val
-                next_input_real[0, f_idx] = new_val
-            else:
-                # DIRECT LOGIC: New State = Prediction
+            if mode == "DIRECT" or mode == "DIRECT_DELTA":
                 next_input_real[0, f_idx] = pred_val
+                
+            elif mode == "INTEGRATE":
+                # Vel_new = Vel_old + Pred_Delta
+                old_val = last_feat_real[0, f_idx]
+                next_input_real[0, f_idx] = old_val + pred_val
+                
+            elif mode == "DIFF":
+                # Delta_new = Pred_Vel - Last_Pred_Vel
+                if i == 0: diff_val = pred_val 
+                else: diff_val = pred_val - last_pred_real[t_idx]
+                next_input_real[0, f_idx] = diff_val
 
-        # D. Update 'last_step_real' for the next iteration (i+2)
-        last_step_real = next_input_real
+        # Update trackers
+        last_pred_real = pred_step_real[0] 
+        last_feat_real = next_input_real   
 
-        # E. Normalize and Shift Window
+        # D. Normalize & Shift
         new_row_norm = x_scaler.transform(next_input_real)
         curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
 
+    recursive_ratio = num_driven / num_targets if num_targets > 0 else 0
     return recursive_preds, recursive_ratio
 
 def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
-    """
-    Runs BOTH One-Step (Teacher Forcing) and Recursive (Dead Reckoning) evaluations.
-    """
+    """Runs BOTH one-step (Teacher Forcing) and recursive (Dead Reckoning) evaluations."""
 
     results = {}
     orig_shape = y_test.shape # (N, H, T)
@@ -750,6 +739,7 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     else:
         true_path_backbone = y_gt_real[:, 0, :]
         true_path = y_gt_real
+        pred_path_backbone = preds_real_step[:, 0, :]
         pred_path_local = preds_real_step
         pred_path_global_open = preds_real_step
 
@@ -766,7 +756,8 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Global_open_R2'] = r2_score(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
     norm_global_error = np.linalg.norm(true_path - pred_path_global_open, axis=2)
     results['Global_open_ADE'] = np.mean(norm_global_error)    
-    results['Global_open_FDE'] = np.mean(norm_global_error[:, -1])   
+    results['Global_open_FDE'] = np.mean(norm_global_error[:, -1])  
+    results['Global_open_Max'] = np.max(norm_global_error)   
 
     for i, name in enumerate(target_names):
         true_i = true_path[..., i].flatten()
@@ -802,6 +793,7 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     norm_global_error = np.linalg.norm(true_path - pred_path_global, axis=2)
     results['Global_closed_ADE'] = np.mean(norm_global_error)    
     results['Global_closed_FDE'] = np.mean(norm_global_error[:, -1])
+    results['Global_closed_Max'] = np.max(norm_global_error)  
     for i, name in enumerate(target_names):
         true_i = true_path[..., i].flatten()
         pred_i = pred_path_global[..., i].flatten()
@@ -840,14 +832,14 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         "metrics": results
     }
 
-
+# ==============================================================================
 # SAVE AND PLOT RESULTS
-# ------------------------------------------------------------------------------------------------------------------------------------------------
+# ==============================================================================
+
 
 def save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp):
     
-    for folder in ["models", "logs", "figures"]:
-        os.makedirs(folder, exist_ok=True)
+    for folder in ["models", "logs", "figures"]: os.makedirs(folder, exist_ok=True)
     
     total_params = len(train_results['final_weights'])
     num_q_params = len(qnn_dict['weight_params'])
@@ -864,12 +856,9 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         "val_history": train_results['val_history'],
         "best_eval_metrics": best_eval['metrics'],
         "final_eval_metrics": final_eval['metrics'],
-        "y_scaler": scalers[1],
-        "x_scaler": scalers[0],
-        "qnn_structure": qnn_dict
+        "y_scaler": scalers[1], "x_scaler": scalers[0], "qnn_structure": qnn_dict
     }
-    with open(model_filename, "wb") as f:
-        pickle.dump(save_payload, f)
+    with open(model_filename, "wb") as f: pickle.dump(save_payload, f)
 
     # Save experiment summary to excel
     excel_filename = "logs/experiments_summary.xlsx"
@@ -1301,7 +1290,7 @@ def load_experiment_results(filepath):
         
         # Print Header
         # Adjust spacing: 16 for name, 9 for short numbers
-        header_str = "{:<16} | {:<9} | {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9}".format(*headers)
+        header_str = "{:<16} | {:<9} {:<9} | {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9}".format(*headers)
         print("-" * len(header_str))
         print(header_str)
         print("-" * len(header_str))
@@ -1325,7 +1314,7 @@ def load_experiment_results(filepath):
                 t_get("Global_closed_MSE"), t_get("Global_closed_R2"), t_get("Global_closed_ADE"), t_get("Global_closed_FDE")
             ]
 
-            print("{:<16} | {:<9} | {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9}".format(*row_vals))
+            print( "{:<16} | {:<9} {:<9} | {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9}".format(*row_vals))
             
         print("-" * len(header_str))
 

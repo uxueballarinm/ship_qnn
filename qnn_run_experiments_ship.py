@@ -13,7 +13,7 @@ except ImportError:
 # --- DEFAULTS (Must match your argparse defaults) ---
 DEFAULTS = {
     'data': "datasets\zigzag_11_11_ind_reduced_2_s.csv",
-    'select_features': None,
+    'select_features': ['dwv','dsvdyr','dya','rarad'],
     'drop_features': None,
     'window_size': 5,
     'horizon': 5,          
