@@ -24,7 +24,7 @@ def run(args):
     df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
     df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
     df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
-    
+
     control_cols = ["Rudder Angle (deg)", "Rudder Angle (rad)"] # Add whatever names you use
     
     for col in control_cols:

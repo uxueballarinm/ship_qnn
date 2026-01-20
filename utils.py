@@ -1387,7 +1387,7 @@ def plot_convergence(args, results, filename=None):
 # ==========================================
 # PLOT 1: LOCAL BRANCHES (Dynamics)
 # ==========================================
-def plot_kinematics_branches(args, data, step_interval=20, filename=None):
+def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filename=None):
     """
     Plots short horizon predictions branching off the true path for all 4 targets.
     Replaces: plot_horizon_branches
@@ -1395,6 +1395,16 @@ def plot_kinematics_branches(args, data, step_interval=20, filename=None):
     true_path = data['true_backbone'] # (N, 4)
     pred_path = data['local']['pred_path'] # (N, H, 4)
     time_steps = np.arange(len(true_path))
+
+    if horizons is None:
+        horizons = [args.horizon]
+    # If single int, convert to list
+    elif isinstance(horizons, (int, float)):
+        horizons = [int(horizons)]
+
+    max_h = pred_path.shape[1]
+    horizons = [min(h, max_h) for h in horizons]
+    horizons.sort(reverse=True)
 
     fig = plt.figure(figsize=(14, 10))
     gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
@@ -1427,48 +1437,60 @@ def plot_kinematics_branches(args, data, step_interval=20, filename=None):
     color_branch = colors[1] if 'colors' in globals() and len(colors) > 1 else '#1f77b4'
 
     for i in range(0, num_samples, step_interval):
-        # Create time indices for this specific branch
-        t_indices = np.arange(i, i + args.horizon + 1)
-        if t_indices[-1] >= len(time_steps): continue
-        
-        # Get the branch data (Start at true[i], then append preds)
-        # We need to do this for all 4 dimensions
-        curr_true = true_path[i].reshape(1, 4)
-        curr_pred = pred_path[i] # (H, 4)
-        branch_data = np.vstack([curr_true, curr_pred]) # (H+1, 4)
+        # Loop through requested horizons (e.g. 5, then 1)
+        for h_idx, h in enumerate(horizons):
+            
+            # Create time indices for this specific branch length
+            t_indices = np.arange(i, i + h + 1)
+            if t_indices[-1] >= len(time_steps): continue
+            
+            # Get the branch data: Start at true[i], then append preds up to step h
+            curr_true = true_path[i].reshape(1, 4)
+            curr_pred = pred_path[i, :h, :] # Slice: take only first h steps
+            branch_data = np.vstack([curr_true, curr_pred]) # (h+1, 4)
 
-        # Plot on all 4 subplots
-        for idx, ax in enumerate(axes):
-            # Only label the first branch to avoid legend spam
-            lbl = f'Pred Horizon (H={args.horizon})' if i == 0 else ""
-            ax.plot(t_indices, branch_data[:, idx], color=color_branch, 
-                    linestyle='-', linewidth=1.5, alpha=0.8, label=lbl)
+            # Pick color: Cycle through colors based on horizon index
+            # If 'colors' exists globally use it, else fallback
+            if 'colors' in globals() and len(colors) > 0:
+                c = colors[(h_idx + 1) % len(colors)] 
+            else:
+                c = ['#1f77b4', '#ff7f0e', '#2ca02c'][h_idx % 3]
 
-    # Add legend to first plot
+            # Plot on all 4 subplots
+            for idx, ax in enumerate(axes):
+                # Legend logic: Only label the first branch of the first timestep
+                lbl = f'Pred (H={h})' if (i == 0 and idx == 0) else ""
+                
+                # Plot
+                ax.plot(t_indices, branch_data[:, idx], color=c, 
+                        linestyle='-', linewidth=1.5, alpha=0.8, label=lbl if idx==0 else "")
+
+    # Add legend to first plot (it will contain entries for True Path and each Horizon length)
     axes[0].legend(prop=legend_prop if 'legend_prop' in globals() else None)
+    
     for ax in axes: 
         if '_force_ticks_font' in globals(): _force_ticks_font(ax)
 
-    fig.suptitle("Local Horizon Branches (Kinematics)", y=0.96, **title_style)
+    h_str = ",".join(map(str, horizons))
+    fig.suptitle(f"Local Horizon Branches (H={h_str})", y=0.96, **title_style)
     
     if args.save_plot and filename:
-        plt.savefig(filename + "_local_branches.png", dpi=300, bbox_inches='tight')
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()
-# ==========================================
-# PLOT 2: GLOBAL DRIFT (Trajectory)
-# ==========================================
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-import numpy as np
 
 # ==========================================
 # PLOT 2: KINEMATICS VS TIME (4 Targets)
 # ==========================================
-def plot_kinematics_time_series(args, data, loop='closed', horizon_step=1, filename=None):
+def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], filename=None):
     """
     Plots Surge, Sway, Yaw Rate, and Yaw Angle vs Time in a 2x2 grid.
     """
+    if isinstance(horizon_steps, (int, float)):
+        horizon_steps = [int(horizon_steps)]
+    
+    # Sort so legend is orderly
+    horizon_steps.sort()
     # 1. Extract Data
     # true_backbone shape expected: (N, 4) -> [Surge, Sway, Yaw Rate, Yaw Angle]
     true_data = data['true_backbone'] 
@@ -1476,22 +1498,6 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_step=1, filen
     # pred_path shape expected: (N, Horizon, 4)
     # We extract the specific horizon step 'k' to get a continuous trajectory (N, 4)
     raw_pred = data['global'][loop]['pred_path']
-    
-    # Extract the k-th step from the horizon predictions to build a continuous line
-    k = horizon_step - 1
-    if k < raw_pred.shape[1]:
-        # Shift time to align with the horizon delay
-        pred_seq = raw_pred[:-k, k, :] if k > 0 else raw_pred[:, k, :]
-        true_seq = true_data[k:] if k > 0 else true_data
-    else:
-        print(f"Warning: Horizon step {horizon_step} is out of bounds.")
-        return
-
-    # Ensure lengths match exactly for plotting
-    min_len = min(len(true_seq), len(pred_seq))
-    true_seq = true_seq[:min_len]
-    pred_seq = pred_seq[:min_len]
-    time_steps = np.arange(min_len)
 
     # 2. Setup Figure
     fig = plt.figure(figsize=(14, 10))
@@ -1507,48 +1513,64 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_step=1, filen
     # 3. Loop through the 4 targets and plot
     axes = []
     for i, target in enumerate(targets):
-        row = i // 2
-        col = i % 2
+        row, col = i // 2, i % 2
         ax = fig.add_subplot(gs[row, col])
         
         # Plot True
-        ax.plot(time_steps, true_seq[:, target['idx']], 'k-', linewidth=1.5, alpha=0.5, label='True')
+        time_steps_true = np.arange(len(true_data))
+        ax.plot(time_steps_true, true_data[:, target['idx']], 'k-', linewidth=1.5, alpha=0.4, label='True')
         
-        # Plot Pred
-        color = '#D62728' # Red for prediction (or use your global colors)
-        ax.plot(time_steps, pred_seq[:, target['idx']], '--', color=color, linewidth=2.0, alpha=0.9, label=f'Pred (k={horizon_step})')
+        for h_idx, h in enumerate(horizon_steps):
+            k = h - 1
+            if k >= raw_pred.shape[1]: 
+                continue # Skip if horizon is out of bounds
+
+            # Shift logic to align "k-th step prediction" with "Time t"
+            if k == 0:
+                pred_seq = raw_pred[:, k, :]
+                true_seq_aligned = true_data
+                start_t = 0
+            else:
+                pred_seq = raw_pred[:-k, k, :]
+                true_seq_aligned = true_data[k:]
+                start_t = k # Plot offset so X-axis matches reality
+
+            min_len = min(len(true_seq_aligned), len(pred_seq))
+            pred_seq = pred_seq[:min_len]
+            
+            # Time axis for this specific line
+            t_axis = np.arange(start_t, start_t + min_len)
+
+            # Color cycling
+            if 'colors' in globals(): c = colors[h_idx % len(colors)]
+            else: c = ['#D62728', '#1f77b4', '#2ca02c'][h_idx % 3]
+
+            # Plot Prediction
+            ax.plot(t_axis, pred_seq[:, target['idx']], '--', color=c, 
+                    linewidth=1.8, alpha=0.9, label=f'Pred (k={h})')
 
         # Styling
         ax.set_title(target['name'], **subtitle_style)
         ax.set_ylabel(rf"$\mathit{{{target['name'].split()[0]}}}$ [{target['unit']}]", **label_style)
-        
-        # Only show X label on bottom rows
-        if row == 1:
-            ax.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
-        
+        if row == 1: ax.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
         ax.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
-        
-        # Force your custom tick font
-        if '_force_ticks_font' in globals(): 
-            _force_ticks_font(ax)
-            
+        if '_force_ticks_font' in globals(): _force_ticks_font(ax)
         axes.append(ax)
 
-    # Add single legend to the first plot or outside
+    # Legend on first plot
     axes[0].legend(prop=legend_prop if 'legend_prop' in globals() else None, loc='best')
 
-    # 4. Final Layout
-    header_title = f"Kinematics Analysis ({loop.capitalize()} Loop - Horizon Step {horizon_step})"
-    fig.suptitle(header_title, y=0.96, **title_style)
+    # Final Layout
+    h_str = ",".join(map(str, horizon_steps))
+    fig.suptitle(f"Kinematics Analysis ({loop.capitalize()} - Steps: {h_str})", y=0.96, **title_style)
     
     if args.save_plot and filename:
-        save_path = filename + f"_kinematics_{loop}_k{horizon_step}.png"
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Plot saved to {save_path}")
+        # Check if filename has extension, if not add it
+        if not filename.endswith('.png'):
+            filename += f"_k{h_str.replace(',', '-')}.png"
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
 
-    if args.show_plot:
-        plt.show()
-    
+    if args.show_plot: plt.show()
     plt.close()
 
 # ==========================================
@@ -1580,56 +1602,81 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
     # 2. Norm error (Euclidean dist in 4D): (N, H)
     norm_error = np.linalg.norm(true_path - pred_path, axis=2)
 
-    # Select Horizon Step (Mean vs Max vs Specific)
-    if horizon_mode == 'mean':
-        y_norm_err = np.mean(norm_error, axis=1) # (N,)
-        y_comp_err = np.mean(error_tensor, axis=1) # (N, 4)
-        label_str = "Mean over Horizon"
-    elif horizon_mode == 'max':
-        y_norm_err = np.max(norm_error, axis=1)
-        y_comp_err = np.max(error_tensor, axis=1)
-        label_str = "Max over Horizon"
-    elif isinstance(horizon_mode, int):
-        k = horizon_mode - 1
-        y_norm_err = norm_error[:, k]
-        y_comp_err = error_tensor[:, k, :]
-        label_str = f"Horizon Step {horizon_mode}"
+    if not isinstance(horizon_mode, list):
+        modes = [horizon_mode]
+    else:
+        modes = horizon_mode
 
-    # Plotting
+
     fig = plt.figure(figsize=(12, 12))
     gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1], hspace=0.3)
 
     # A. Top Plot: Aggregate Norm Error
     ax_top = plt.subplot(gs[0])
+    ax_top_r = ax_top.twinx() # Twin axis for Instant Error
+
+    # Colors for multiple modes
+    colors_list = ['#D62728', '#1f77b4', '#2ca02c', '#ff7f0e'] # Red, Blue, Green, Orange
     
-    # Plot Accumulated Error
-    acc_error = np.cumsum(y_norm_err)
-    c_acc, c_net = '#D62728', '#1F77B4'
-    
-    ax_top.plot(time_steps, acc_error, color=c_acc, linewidth=2.5, label='Accumulated Norm Error')
-    ax_top.set_ylabel(r"$\mathit{Accumulated\ Error}$", color=c_acc, **label_style)
-    ax_top.tick_params(axis='y', labelcolor=c_acc)
-    
-    # Twin axis for Net Error
-    ax_top_r = ax_top.twinx()
-    ax_top_r.plot(time_steps, y_norm_err, color=c_net, alpha=0.6, linestyle='--', linewidth=1.5, label='Inst. Norm Error')
-    ax_top_r.set_ylabel(r"$\mathit{Instant\ Error}$", color=c_net, **label_style)
-    ax_top_r.tick_params(axis='y', labelcolor=c_net)
-    
-    ax_top.set_title(f"Aggregate Error ({label_str})", **title_style)
+    # Loop through requested modes
+    for i, h_mode in enumerate(modes):
+        
+        # 1. Select Data
+        if h_mode == 'mean':
+            y_norm = np.mean(norm_error, axis=1)
+            label = "Mean"
+            c = '#000000' # Black for Mean
+        elif h_mode == 'max':
+            y_norm = np.max(norm_error, axis=1)
+            label = "Max"
+            c = '#800080' # Purple for Max
+        elif isinstance(h_mode, int):
+            k = h_mode - 1
+            if k >= norm_error.shape[1]: continue
+            y_norm = norm_error[:, k]
+            label = f"H={h_mode}"
+            c = colors_list[i % len(colors_list)]
+        acc_error = np.cumsum(y_norm)
+        ax_top.plot(time_steps, acc_error, color=c, linewidth=2.0, alpha=0.9, label=f'Acc ({label})')
+        
+        # Right Axis: Instant Error
+        ax_top_r.plot(time_steps, y_norm, color=c, alpha=0.4, linestyle='--', linewidth=1.0, label=f'Inst ({label})')
+# Styling Top
+    ax_top.set_ylabel(r"$\mathit{Accumulated\ Error}$", **label_style)
+    ax_top_r.set_ylabel(r"$\mathit{Instant\ Error}$", **label_style)
+    ax_top.set_title(f"Aggregate Error Analysis ({mode}-{loop})", **title_style)
     ax_top.grid(True, linestyle=':', alpha=0.6)
     
-    # B. Bottom Plot: Error Per Component
+    # Combine legends
+    lines1, labels1 = ax_top.get_legend_handles_labels()
+    lines2, labels2 = ax_top_r.get_legend_handles_labels()
+    ax_top.legend(lines1 + lines2, labels1 + labels2, loc='upper left', prop=legend_prop, ncol=2)
+
+
+    # B. Bottom Plot: Error Per Component (Uses the FIRST mode in the list only)
+    # Visualizing component error for multiple horizons simultaneously gets too messy.
     ax_bot = plt.subplot(gs[1], sharex=ax_top)
     
-    comp_labels = ["Surge Err", "Sway Err", "YawRate Err", "YawAng Err"]
-    comp_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd'] # Standard tab10 colors
+    primary_mode = modes[0]
+    if primary_mode == 'mean':
+        y_comp = np.mean(error_tensor, axis=1)
+        sub_title = "Component Error (Mean)"
+    elif primary_mode == 'max':
+        y_comp = np.max(error_tensor, axis=1)
+        sub_title = "Component Error (Max)"
+    elif isinstance(primary_mode, int):
+        k = primary_mode - 1
+        y_comp = error_tensor[:, k, :]
+        sub_title = f"Component Error (H={primary_mode})"
+    
+    comp_labels = ["Surge", "Sway", "YawRate", "YawAng"]
+    comp_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd']
     
     for i in range(4):
-        ax_bot.plot(time_steps, y_comp_err[:, i], color=comp_colors[i], 
+        ax_bot.plot(time_steps, y_comp[:, i], color=comp_colors[i], 
                     linewidth=1.5, alpha=0.8, label=comp_labels[i])
         
-    ax_bot.set_title("Error by Component", **subtitle_style)
+    ax_bot.set_title(sub_title, **subtitle_style)
     ax_bot.set_ylabel(r"$\mathit{Absolute\ Error}$", **label_style)
     ax_bot.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
     ax_bot.grid(True, linestyle='--', alpha=0.5)
@@ -1639,7 +1686,9 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
         if '_force_ticks_font' in globals(): _force_ticks_font(ax)
 
     if args.save_plot and filename:
-        plt.savefig(filename + f"_errors_{mode}_{loop}.png", dpi=300, bbox_inches='tight')
+        # Append mode to filename
+        mode_str = "-".join(map(str, modes))
+        plt.savefig(filename + f"_{mode_str}.png", dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()
 # ==========================================
