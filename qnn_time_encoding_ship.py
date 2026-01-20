@@ -164,7 +164,7 @@ if __name__=="__main__":
     # parser.add_argument('--plot', type=str, default='short', choices=['short', 'long'], help="Plot 'short' (based on previous true kinematic variables) or 'long' (cumulative) prediction")
 
     # QNN model
-    # parser.add_argument('--map', type = str,choices = ['True', 'False'], default=False)   
+    parser.add_argument('--map', type = str,nargs='+', help="Specific order of feature indices (e.g. 2 0 1)")  
     parser.add_argument('--reorder', type=str2bool, default=True, choices=[True, False])
     parser.add_argument('--encoding', type=str, default='compact', choices=['compact', 'serial', 'parallel'], help="Strategy for multi-feature encoding")
     parser.add_argument('--entangle', type=str, default='reverse_linear', choices=['full', 'linear', 'reverse_linear', 'circular', 'sca']) # reverse_linear
