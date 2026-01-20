@@ -109,11 +109,11 @@ def run_test(cli_args):
 
         # Global Open Plots
         plot_kinematics_time_series(args, results, loop = 'open', filename=f"{save_dir}/plot_trajectory_open.png")
-        plot_kinematics_errors(args, results, loop = 'open', filename=f"{save_dir}/plot_error_vs_time")
+        plot_kinematics_errors(args, results, loop = 'open', filename=f"{save_dir}/compare_error/plot_error_vs_time")
 
         #Global Closed Plots
         plot_kinematics_time_series(args, results, loop = 'closed', filename=f"{save_dir}/plot_trajectory_closed.png")
-        plot_kinematics_errors(args, results, loop = 'closed', filename=f"{save_dir}/plot_error_vs_time")
+        plot_kinematics_errors(args, results, loop = 'closed', filename=f"{save_dir}/compare_error/plot_error_vs_time")
     elif cli_args.version == 'save':
         print("\n[Info] Saving Test Results to Excel/Logs...")
         
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', type=str, choices=['old', 'new','save'],default='old', help="Choose 'old' to run test and generate plots, 'new' to load results, 'save' to save test results")
     parser.add_argument('--model', type=str, required=True, help="Path to .pkl")
-    parser.add_argument('--data', type=str, default="datasets\zigzag_10_40_ood_reduced_2_s.csv")
+    parser.add_argument('--data', type=str, default="datasets\zigzag_11_11_ind_reduced_2_s.csv")
     parser.add_argument('--final', action='store_true')
     parser.add_argument('--show_plot', type=str2bool, default=False, choices=[True, False], help="Show plots interactively")
     parser.add_argument('--save_plot', type=str2bool, default=True, choices=[True, False], help="Save plots to files")

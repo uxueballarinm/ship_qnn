@@ -135,11 +135,11 @@ def run_classical(args):
 
     # Global Open Plots
     plot_kinematics_time_series(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_trajectory_open.png")
-    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
 
     #Global Closed Plots
     plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_trajectory_closed.png")
-    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
     scalers = [x_scaler, y_scaler]
     save_classical_results(args, results, best_eval, final_eval, scalers=scalers, timestamp=timestamp)
     load_experiment_results(f"models/{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl")

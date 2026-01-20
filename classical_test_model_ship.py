@@ -121,10 +121,10 @@ def run_test_classical(cli_args):
 
     # Global Open Plots
     plot_kinematics_time_series(args, results, loop = 'open', filename=f"{save_dir}/plot_kinematics_open.png")
-    plot_kinematics_errors(args, results, loop = 'open', filename=f"{save_dir}/plot_error_vs_time")
+    plot_kinematics_errors(args, results, loop = 'open', filename=f"{save_dir}/compare_error/plot_error_vs_time")
     #Global Closed Plots
     plot_kinematics_time_series(args, results, loop = 'closed', filename=f"{save_dir}/plot_kinematics_closed.png")
-    plot_kinematics_errors(args, results, loop = 'closed', filename=f"{save_dir}/plot_error_vs_time")
+    plot_kinematics_errors(args, results, loop = 'closed', filename=f"{save_dir}/compare_error/plot_error_vs_time")
     
 
     print("Done.")

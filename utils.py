@@ -19,7 +19,7 @@ from matplotlib.lines import Line2D
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import r2_score, mean_squared_error,mean_absolute_error
 
 import torch
 import torch.nn as nn
@@ -721,6 +721,7 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results = {}
     orig_shape = y_test.shape # (N, H, T)
     num_targets = orig_shape[-1]
+    target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
     # ONE-STEP EVALUATION
     preds_norm_step = model.forward(x_test, params) 
     
@@ -736,6 +737,10 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Step_MSE'] = mean_squared_error(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
     results['Step_R2'] = r2_score(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
 
+    for i, name in enumerate(target_names):
+        results[f'{name}_Step_MSE'] = mean_squared_error(y_gt_real[..., i].flatten(), preds_real_step[..., i].flatten())
+        results[f'{name}_Step_R2']  = r2_score(y_gt_real[..., i].flatten(), preds_real_step[..., i].flatten())
+
     if args.predict == 'delta':
         true_path_backbone = np.concatenate([np.zeros((1, num_targets)), np.cumsum(y_gt_real[:, 0, :], axis=0)])
         true_path = true_path_backbone[:-1, None, :] + np.cumsum(y_gt_real, axis=1)
@@ -746,20 +751,34 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         true_path_backbone = y_gt_real[:, 0, :]
         true_path = y_gt_real
         pred_path_local = preds_real_step
-
-        pred_path_backbone = preds_real_step[:, 0, :]
         pred_path_global_open = preds_real_step
 
     results['Local_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_local.reshape(-1, num_targets))
     norm_local_error = np.linalg.norm(true_path - pred_path_local, axis=2)
     results['Local_ADE'] = np.mean(norm_local_error)
+    for i, name in enumerate(target_names):
+        true_i = true_path[..., i].flatten()
+        pred_i = pred_path_local[..., i].flatten()
+        results[f'{name}_Local_MSE'] = mean_squared_error(true_i, pred_i)
+        results[f'{name}_Local_ADE'] = np.mean(np.abs(true_path[..., i] - pred_path_local[..., i]))
 
     results['Global_open_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
     results['Global_open_R2'] = r2_score(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
     norm_global_error = np.linalg.norm(true_path - pred_path_global_open, axis=2)
     results['Global_open_ADE'] = np.mean(norm_global_error)    
-    results['Global_open_FDE'] = norm_global_error[-1,-1]      
-    results['Global_open_Max'] = np.max(norm_global_error)   
+    results['Global_open_FDE'] = np.mean(norm_global_error[:, -1])   
+
+    for i, name in enumerate(target_names):
+        true_i = true_path[..., i].flatten()
+        pred_i = pred_path_global_open[..., i].flatten()
+        
+        # Calculate Abs Error for Max logic
+        abs_err = np.abs(true_path[..., i] - pred_path_global_open[..., i])
+        
+        results[f'{name}_Global_open_MSE'] = mean_squared_error(true_i, pred_i)
+        results[f'{name}_Global_open_R2']  = r2_score(true_i, pred_i)
+        results[f'{name}_Global_open_ADE'] = np.mean(abs_err)    
+        results[f'{name}_Global_open_FDE'] = np.mean(abs_err[:, -1])
 
     # RECURSIVE EVALUATION (Updated Unpacking)
     preds_norm_rec, rec_ratio = recursive_forward_pass(args, model, params, x_test, x_scaler, y_scaler)
@@ -782,8 +801,22 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Global_closed_R2'] = r2_score(true_path.reshape(-1, num_targets), pred_path_global.reshape(-1, num_targets))
     norm_global_error = np.linalg.norm(true_path - pred_path_global, axis=2)
     results['Global_closed_ADE'] = np.mean(norm_global_error)    
-    results['Global_closed_FDE'] = norm_global_error[-1,-1]      
-    results['Global_closed_Max'] = np.max(norm_global_error) 
+    results['Global_closed_FDE'] = np.mean(norm_global_error[:, -1])
+    for i, name in enumerate(target_names):
+        true_i = true_path[..., i].flatten()
+        pred_i = pred_path_global[..., i].flatten()
+        abs_err = np.abs(true_path[..., i] - pred_path_global[..., i])
+        
+        mse_i = mean_squared_error(true_i, pred_i)
+        r2_i = r2_score(true_i, pred_i)
+        max_i = np.max(abs_err)
+        
+        # Store individual metrics
+        results[f'{name}_Global_closed_MSE'] = mse_i
+        results[f'{name}_Global_closed_R2']  = r2_i
+        results[f'{name}_Global_closed_ADE'] = np.mean(abs_err)    
+        results[f'{name}_Global_closed_FDE'] = np.mean(abs_err[:, -1])  
+
 
     return {
         "true_deltas_denorm": y_gt_real,
@@ -909,6 +942,26 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     }
     raw_data.update(metrics_flat)
 
+    target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
+    metric_types = [
+        "Step_MSE", "Step_R2",
+        "Local_MSE", "Local_ADE",
+        # Added ADE and FDE here to match your evaluate_model updates
+        "Global_open_MSE", "Global_open_R2", "Global_open_ADE", "Global_open_FDE",
+        "Global_closed_MSE", "Global_closed_R2", "Global_closed_ADE", "Global_closed_FDE"
+    ]
+    per_target_cols = []
+    
+    for tgt in target_names:
+        for m_type in metric_types:
+            key_in_dict = f"{tgt}_{m_type}" # e.g. Surge_Velocity_Global_closed_RMSE
+            
+            if key_in_dict in m_final:
+                # Clean up name for Excel (Surge Velocity Global closed RMSE)
+                col_name = key_in_dict.replace("_", " ") 
+                raw_data[col_name] = m_final[key_in_dict]
+                per_target_cols.append(col_name)
+
     column_order = [
         # 1. ID & Meta
         "date", "model_id", "run", "testing_fold",
@@ -932,14 +985,13 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         "local MSE", "local ADE",
         "global open MSE", "global open ADE", "global open FDE", "global open R2", 
         "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
-
     ]
-
+    final_column_order = column_order + per_target_cols
     # Construct the final ordered dictionary
     ordered_row = {}
     
     # Add ordered keys first
-    for col in column_order:
+    for col in final_column_order:
         if col in raw_data:
             ordered_row[col] = raw_data.pop(col) # Remove from raw_data as we add
             
@@ -1046,7 +1098,6 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
                 raw_data[key] = clean_val(short_list)
             else:
                 raw_data[key] = clean_val(value)
-            
     metrics_flat = {
         "step MSE": m_final.get('Step_MSE'),
         "step R2": m_final.get('Step_R2'),
@@ -1063,17 +1114,36 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         "global closed ADE": m_final.get('Global_closed_ADE'),
         "global closed FDE": m_final.get('Global_closed_FDE'),
 
-
+        
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "total params": total_params,
         "iterations": len(train_results['train_history']),
         "date": dt_object,
         "model_id": model_filename.split('/')[-1],
         "model": "classical_lstm" # Explicitly naming the architecture
-    }    
-    
+    }
     raw_data.update(metrics_flat)
+
+    target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
+    metric_types = [
+        "Step_MSE", "Step_R2",
+        "Local_MSE", "Local_ADE",
+        # Added ADE and FDE here to match your evaluate_model updates
+        "Global_open_MSE", "Global_open_R2", "Global_open_ADE", "Global_open_FDE",
+        "Global_closed_MSE", "Global_closed_R2", "Global_closed_ADE", "Global_closed_FDE"
+    ]
+    per_target_cols = []
     
+    for tgt in target_names:
+        for m_type in metric_types:
+            key_in_dict = f"{tgt}_{m_type}" # e.g. Surge_Velocity_Global_closed_RMSE
+            
+            if key_in_dict in m_final:
+                # Clean up name for Excel (Surge Velocity Global closed RMSE)
+                col_name = key_in_dict.replace("_", " ") 
+                raw_data[col_name] = m_final[key_in_dict]
+                per_target_cols.append(col_name)
+        
     column_order = [
         # 1. ID & Meta
         "date", "model_id", "run", "testing_fold",
@@ -1098,11 +1168,12 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         "global open MSE", "global open ADE", "global open FDE", "global open R2", 
         "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
     ]
+    final_column_order = column_order + per_target_cols
     # Construct the final ordered dictionary
     ordered_row = {}
     
     # Add ordered keys first
-    for col in column_order:
+    for col in final_column_order:
         if col in raw_data:
             ordered_row[col] = raw_data.pop(col) 
             
@@ -1140,12 +1211,10 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         
     print(f"\n[Logger] Classical model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
-    
 def load_experiment_results(filepath):
     """
-    Loads a saved experiment pickle file and prints a summary.
-    automatically detecting if it is a Quantum or Classical model to 
-    display the relevant hyperparameters.
+    Loads a saved experiment pickle file and prints a comprehensive summary,
+    including a detailed per-feature metric table with Step, Local, Open, and Closed metrics.
     """
     if not os.path.exists(filepath):
         raise FileNotFoundError(f"File not found: {filepath}")
@@ -1157,18 +1226,19 @@ def load_experiment_results(filepath):
         
     config = data.get('config', {})
     m_best = data.get('best_eval_metrics', {})
-    m_final = data.get('final_eval_metrics', {})
+    m_final = data.get('final_eval_metrics', {}) # We report final weights metrics
     
+    # Model type detection fallback
     if config.get('model') is None:
         if 'classical' in filepath.lower() or 'hidden_size' in config:
             config['model'] = 'classical_lstm'
         else:
             config['model'] = 'N/A'
 
-    # --- Print Summary ---
-    print("\n" + "="*85)
+    # --- Print Summary Header ---
+    print("\n" + "="*120)
     print(f"EXPERIMENT SUMMARY")
-    print("="*85)
+    print("="*120)
     fname = os.path.basename(filepath)
     try:
         parts = fname.split('_')
@@ -1178,111 +1248,101 @@ def load_experiment_results(filepath):
         
     print(f"Timestamp: {timestamp}")
     
-    # --- DYNAMIC CONFIGURATION PRINTING ---
+    # --- Configuration ---
     print("\n--- Configuration ---")
-    
-    # 1. Common Keys (Shared by both)
     common_keys = ['model', 'features', 'window_size', 'horizon', 'optimizer']
-    
-    # 2. Model-Specific Keys
     quantum_keys = ['ansatz', 'encoding', 'reps', 'entangle']
     classical_keys = ['hidden_size', 'layers', 'learning_rate', 'batch_size', 'patience']
 
-    # Detect Model Type
     model_type = config.get('model', 'unknown')
-    
-    # Select which keys to show
     keys_to_show = common_keys.copy()
     
     if 'lstm' in model_type.lower() or 'classical' in filepath.lower():
         keys_to_show.extend(classical_keys)
     else:
-        # Default to Quantum if not explicitly classical
         keys_to_show.extend(quantum_keys)
 
-    # Print the selected keys
     for k in keys_to_show:
         val = config.get(k, 'N/A')
-        
-        # Format lists nicely
         if isinstance(val, list) and k == 'features':
             val = f"{len(val)} features"
         elif isinstance(val, list):
             val = str(val)
-            
         print(f"{k:<15}: {val}")
     
-    print("\n--- Training Stats ---")
-    train_hist = data.get('train_history', [])
-    print(f"Total Iterations : {len(train_hist)}")
-    if train_hist:
-        print(f"Final Train Loss : {train_hist[-1]:.6f}")
-    # Check for validation history
-    val_hist = data.get('val_history', [])
-    if val_hist:
-        print(f"Final Val Loss   : {val_hist[-1]:.6f}")
-            
-    print("\n--- Performance Comparison (Best vs. Final Weights) ---")
-    print(f"{'METRIC':<25} | {'BEST WEIGHTS':<18} | {'FINAL WEIGHTS':<18}")
-    print("-" * 85)
+    # --- Performance Table (Aggregate) ---
+    print("\n--- Aggregate Performance (Final Weights) ---")
     
-    if m_best and m_final:
+    if m_final:
         def get_fmt(metrics, key):
-            # Try exact key first, then lowercase match if needed (for backward compatibility)
             val = metrics.get(key)
-            if val is None:
-                # Try finding case-insensitive match
-                key_lower = key.lower().replace(" ", "_")
-                for k, v in metrics.items():
-                    if k.lower().replace(" ", "_") == key_lower:
-                        val = v
-                        break
-            
-            if val is None or val == -1: return "N/A"
+            if val is None: return "N/A"
             return f"{val:.6f}" if isinstance(val, (int, float)) else str(val)
 
-        # --- 1. Step Metrics ---
-        print(f"{'Step MSE':<25} | {get_fmt(m_best, 'Step_MSE'):<18} | {get_fmt(m_final, 'Step_MSE'):<18}")
-        print(f"{'Step R2 Score':<25} | {get_fmt(m_best, 'Step_R2'):<18} | {get_fmt(m_final, 'Step_R2'):<18}")
+        # Aggregate Row 1
+        print(f"Step MSE: {get_fmt(m_final, 'Step_MSE'):<12} | Step R2: {get_fmt(m_final, 'Step_R2'):<12} | Local MSE: {get_fmt(m_final, 'Local_MSE'):<12} | Local ADE: {get_fmt(m_final, 'Local_ADE')}")
+        print("-" * 120)
+        # Aggregate Row 2
+        print(f"Global OPEN   -> MSE: {get_fmt(m_final, 'Global_open_MSE'):<10} | R2: {get_fmt(m_final, 'Global_open_R2'):<10} | ADE: {get_fmt(m_final, 'Global_open_ADE'):<10} | FDE: {get_fmt(m_final, 'Global_open_FDE')}")
+        print(f"Global CLOSED -> MSE: {get_fmt(m_final, 'Global_closed_MSE'):<10} | R2: {get_fmt(m_final, 'Global_closed_R2'):<10} | ADE: {get_fmt(m_final, 'Global_closed_ADE'):<10} | FDE: {get_fmt(m_final, 'Global_closed_FDE')}")
 
-        # --- 2. Local Trajectory Metrics ---
-        print("-" * 85)
-        print(f"{'Local Traj MSE':<25} | {get_fmt(m_best, 'Local_MSE'):<18} | {get_fmt(m_final, 'Local_MSE'):<18}")
-        print(f"{'Local ADE (m)':<25} | {get_fmt(m_best, 'Local_ADE'):<18} | {get_fmt(m_final, 'Local_ADE'):<18}")
+        # --- DETAILED PER-TARGET TABLE ---
+        print("\n--- Detailed Breakdown per Target (All Phases) ---")
+        
+        # Define Columns
+        headers = [
+            "TARGET", 
+            "Step MSE",
+            "Step R2",
+            "Loc MSE", "Loc ADE", 
+            "Open MSE", "Open R2", "Open ADE", "Open FDE", 
+            "Clos MSE", "Clos R2", "Clos ADE", "Clos FDE"
+        ]
+        
+        # Print Header
+        # Adjust spacing: 16 for name, 9 for short numbers
+        header_str = "{:<16} | {:<9} | {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9}".format(*headers)
+        print("-" * len(header_str))
+        print(header_str)
+        print("-" * len(header_str))
 
-        # --- 3. Global Trajectory Metrics Open ---
-        print("-" * 85)
-        print(f"{'Global Open Traj MSE':<25} | {get_fmt(m_best, 'Global_open_MSE'):<18} | {get_fmt(m_final, 'Global_open_MSE'):<18}")
-        print(f"{'Global Open ADE (m)':<25} | {get_fmt(m_best, 'Global_open_ADE'):<18} | {get_fmt(m_final, 'Global_open_ADE'):<18}")
-        print(f"{'Global Open FDE (m)':<25} | {get_fmt(m_best, 'Global_open_FDE'):<18} | {get_fmt(m_final, 'Global_open_FDE'):<18}")
-        print(f"{'Global Open R2 Score':<25} | {get_fmt(m_best, 'Global_open_R2'):<18} | {get_fmt(m_final, 'Global_open_R2'):<18}")
+        target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
+        
+        for tgt in target_names:
+            # Helper to safely get metric for this specific target
+            def t_get(metric_suffix):
+                key = f"{tgt}_{metric_suffix}"
+                val = m_final.get(key)
+                if val is None: return "N/A"
+                return f"{val:.5f}" if isinstance(val, (int, float)) else str(val)
 
-        # --- 4. Global Trajectory Metrics Closed ---
-        print("-" * 85)
-        print(f"{'Global Closed Traj MSE':<25} | {get_fmt(m_best, 'Global_closed_MSE'):<18} | {get_fmt(m_final, 'Global_closed_MSE'):<18}")
-        print(f"{'Global Closed ADE (m)':<25} | {get_fmt(m_best, 'Global_closed_ADE'):<18} | {get_fmt(m_final, 'Global_closed_ADE'):<18}")
-        print(f"{'Global Closed FDE (m)':<25} | {get_fmt(m_best, 'Global_closed_FDE'):<18} | {get_fmt(m_final, 'Global_closed_FDE'):<18}")
-        print(f"{'Global Closed R2 Score':<25} | {get_fmt(m_best, 'Global_closed_R2'):<18} | {get_fmt(m_final, 'Global_closed_R2'):<18}")
+            row_vals = [
+                tgt.replace("_", " "), # Name
+                t_get("Step_MSE"),
+                t_get("Step_R2"),
+                t_get("Local_MSE"), t_get("Local_ADE"),
+                t_get("Global_open_MSE"), t_get("Global_open_R2"), t_get("Global_open_ADE"), t_get("Global_open_FDE"),
+                t_get("Global_closed_MSE"), t_get("Global_closed_R2"), t_get("Global_closed_ADE"), t_get("Global_closed_FDE")
+            ]
 
+            print("{:<16} | {:<9} | {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9} | {:<9} {:<9} {:<9} {:<9}".format(*row_vals))
+            
+        print("-" * len(header_str))
 
     else:
         print("Metric data missing in file.")
 
+    # --- Training Stats ---
     print("\n--- Training Stats ---")
     train_hist = data.get('train_history', [])
-    print(f"Total Epochs     : {len(train_hist)}")
-    if train_hist:
-        print(f"Final Train Loss : {train_hist[-1]:.6f}")
-    
     val_hist = data.get('val_history', [])
-    if val_hist:
-        print(f"Final Val Loss   : {val_hist[-1]:.6f}")
+    print(f"Total Epochs     : {len(train_hist)}")
+    if train_hist: print(f"Final Train Loss : {train_hist[-1]:.6f}")
+    if val_hist:   print(f"Final Val Loss   : {val_hist[-1]:.6f}")
         
-    print("="*85 + "\n")
+    print("="*120 + "\n")
     
     return data
-
-
 
 # --- GLOBAL STYLE CONFIGURATION ---
 plt.rcParams.update({
@@ -1310,6 +1370,13 @@ def _force_ticks_font(ax):
     for label in ax.get_xticklabels() + ax.get_yticklabels():
         label.set_fontname(font_name)
         label.set_fontsize(12)
+
+def _ensure_dir_exists(filename):
+    """Creates the directory structure for a file if it doesn't exist."""
+    if filename:
+        directory = os.path.dirname(filename)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
 
 # ==========================================
 # PLOT 0: CONVERGENCE (Updated: Readable Right Axis)
@@ -1378,7 +1445,8 @@ def plot_convergence(args, results, filename=None):
     
     fig.tight_layout()
     
-    if filename and args.save_plot: 
+    if filename and args.save_plot:
+        _ensure_dir_exists(filename)  # <--- FIXED HERE
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"Convergence plot saved to {filename}")
     if args.show_plot: plt.show()
@@ -1475,6 +1543,7 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
     fig.suptitle(f"Local Horizon Branches (H={h_str})", y=0.96, **title_style)
     
     if args.save_plot and filename:
+        _ensure_dir_exists(filename) 
         plt.savefig(filename, dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()
@@ -1565,9 +1634,8 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], 
     fig.suptitle(f"Kinematics Analysis ({loop.capitalize()} - Steps: {h_str})", y=0.96, **title_style)
     
     if args.save_plot and filename:
-        # Check if filename has extension, if not add it
-        if not filename.endswith('.png'):
-            filename += f"_k{h_str.replace(',', '-')}.png"
+        _ensure_dir_exists(filename) # <--- FIXED HERE
+        if not filename.endswith('.png'): filename += f"_k{h_str.replace(',', '-')}.png"
         plt.savefig(filename, dpi=300, bbox_inches='tight')
 
     if args.show_plot: plt.show()
@@ -1578,166 +1646,249 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], 
 # ==========================================
 def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mode='mean', filename=None):
     """
-    Top: Aggregate Error (Norm of the 4D error vector).
-    Bottom: Individual Error for each of the 4 targets over time.
-    Replaces: plot_errors_and_position_time
+    Generates 4 separate plots (one per target).
+    Each plot has 2 subplots:
+      1. Top: Accumulated Error (Left Axis) vs Net Error (Right Axis).
+      2. Bottom: True Trajectory of that feature.
     """
+    if mode not in data: return
+    
+    # 1. Setup Data
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
     
     # Shapes: (N, H, 4)
-    pred_path = pred_obj['pred_path'] 
-    true_path = data['true_path'] # Assuming this is the expanded horizon version
+    pred_deltas_all_h = pred_obj['pred_deltas_denorm']
+    true_deltas_all_h = data['true_deltas_denorm']
+    pred_path_all_h = pred_obj['pred_path'] 
+    true_path_all_h = data['true_path']
+    true_backbone = data['true_backbone'] # Shape (N, 4)
+
+    # Sync lengths
+    num_points = min(pred_deltas_all_h.shape[0], true_deltas_all_h.shape[0])
+    pred_deltas_all_h = pred_deltas_all_h[:num_points]
+    true_deltas_all_h = true_deltas_all_h[:num_points]
+    pred_path_all_h = pred_path_all_h[:num_points]
+    true_path_all_h = true_path_all_h[:num_points]
     
-    # Ensure matching lengths
-    num_points = min(pred_path.shape[0], true_path.shape[0])
-    pred_path = pred_path[:num_points]
-    true_path = true_path[:num_points]
+    # True path flat (N, 4) used for the bottom plot
+    true_path_flat = true_backbone[:num_points]         
     time_steps = np.arange(num_points)
 
-    # Calculate Errors
-    # 1. Component-wise error: (N, H, 4) -> abs diff
-    error_tensor = np.abs(true_path - pred_path)
-    
-    # 2. Norm error (Euclidean dist in 4D): (N, H)
-    norm_error = np.linalg.norm(true_path - pred_path, axis=2)
+    # Define Targets
+    targets = [
+        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
+        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
+        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
+        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
+    ]
 
-    if not isinstance(horizon_mode, list):
-        modes = [horizon_mode]
-    else:
-        modes = horizon_mode
+    # Ensure output directory exists (handles the 'compare_error' subfolder)
+    if filename:
+        _ensure_dir_exists(filename)
 
-
-    fig = plt.figure(figsize=(12, 12))
-    gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1], hspace=0.3)
-
-    # A. Top Plot: Aggregate Norm Error
-    ax_top = plt.subplot(gs[0])
-    ax_top_r = ax_top.twinx() # Twin axis for Instant Error
-
-    # Colors for multiple modes
-    colors_list = ['#D62728', '#1f77b4', '#2ca02c', '#ff7f0e'] # Red, Blue, Green, Orange
-    
-    # Loop through requested modes
-    for i, h_mode in enumerate(modes):
+    # 2. Iterate over each Target to create separate plots
+    for tgt in targets:
+        idx = tgt['idx']
+        t_name = tgt['name']
+        t_unit = tgt['unit']
         
-        # 1. Select Data
-        if h_mode == 'mean':
-            y_norm = np.mean(norm_error, axis=1)
-            label = "Mean"
-            c = '#000000' # Black for Mean
-        elif h_mode == 'max':
-            y_norm = np.max(norm_error, axis=1)
-            label = "Max"
-            c = '#800080' # Purple for Max
-        elif isinstance(h_mode, int):
-            k = h_mode - 1
-            if k >= norm_error.shape[1]: continue
-            y_norm = norm_error[:, k]
-            label = f"H={h_mode}"
-            c = colors_list[i % len(colors_list)]
-        acc_error = np.cumsum(y_norm)
-        ax_top.plot(time_steps, acc_error, color=c, linewidth=2.0, alpha=0.9, label=f'Acc ({label})')
+        # Calculate Errors for this SPECIFIC target
+        # Abs difference: (N, H)
+        raw_step_errors = np.abs(true_deltas_all_h[:, :, idx] - pred_deltas_all_h[:, :, idx])
+        raw_pos_errors  = np.abs(true_path_all_h[:, :, idx] - pred_path_all_h[:, :, idx])
+        max_h = raw_step_errors.shape[1]
+
+        # Prepare Tasks (Mean, Max, or Specific Horizon)
+        tasks = []
+        if isinstance(horizon_mode, (str, int)): horizon_mode_list = [horizon_mode]
+        else: horizon_mode_list = horizon_mode
+            
+        for h in horizon_mode_list:
+            if h == 'mean':
+                tasks.append( ("Avg H", np.mean(raw_step_errors, axis=1), np.mean(raw_pos_errors, axis=1)) )
+            elif h == 'max':
+                tasks.append( ("Max H", np.max(raw_step_errors, axis=1), np.max(raw_pos_errors, axis=1)) )
+            elif isinstance(h, int):
+                k = h - 1
+                if k < max_h:
+                    tasks.append( (f"H{h}", raw_step_errors[:, k], raw_pos_errors[:, k]) )
+
+        # --- PLOTTING ---
+        fig = plt.figure(figsize=(12, 10))
+        gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1], hspace=0.3)
+
+        # A. Top Plot: Accumulated vs Net Error
+        ax_top_left = plt.subplot(gs[0])
+        ax_top_right = ax_top_left.twinx()
+
+        num_lines = len(tasks)
+        if num_lines == 1:
+            colors_acc = ['#D62728'] # Red
+            colors_net = ['#1F77B4'] # Blue
+        else:
+            colors_acc = [cm.Reds(x) for x in np.linspace(0.5, 1.0, num_lines)]
+            colors_net = [cm.Blues(x) for x in np.linspace(0.5, 1.0, num_lines)]
+
+        lines_legend = []
+        for i, (label, s_err, p_err) in enumerate(tasks):
+            accumulated_error = np.cumsum(s_err)
+            
+            # Left Axis: Accumulated
+            l1, = ax_top_left.plot(time_steps, accumulated_error, color=colors_acc[i], 
+                                   alpha=0.9, linewidth=2.5, label=f'Acc Error ({label})')
+            
+            # Right Axis: Net
+            l2, = ax_top_right.plot(time_steps, p_err, color=colors_net[i], 
+                                    alpha=0.7, linewidth=2.0, linestyle='--', label=f'Net Error ({label})')
+            
+            lines_legend.extend([l1, l2])
+
+        # Styling Top
+        ax_top_left.set_ylabel(rf"$\mathit{{Accumulated\ Error}}$ [{t_unit}]", color=colors_acc[0], **label_style)
+        ax_top_left.tick_params(axis='y', labelcolor=colors_acc[0])
+        ax_top_left.grid(True, linestyle=':', alpha=0.6, linewidth=1.5)
         
-        # Right Axis: Instant Error
-        ax_top_r.plot(time_steps, y_norm, color=c, alpha=0.4, linestyle='--', linewidth=1.0, label=f'Inst ({label})')
-# Styling Top
-    ax_top.set_ylabel(r"$\mathit{Accumulated\ Error}$", **label_style)
-    ax_top_r.set_ylabel(r"$\mathit{Instant\ Error}$", **label_style)
-    ax_top.set_title(f"Aggregate Error Analysis ({mode}-{loop})", **title_style)
-    ax_top.grid(True, linestyle=':', alpha=0.6)
-    
-    # Combine legends
-    lines1, labels1 = ax_top.get_legend_handles_labels()
-    lines2, labels2 = ax_top_r.get_legend_handles_labels()
-    ax_top.legend(lines1 + lines2, labels1 + labels2, loc='upper left', prop=legend_prop, ncol=2)
+        ax_top_right.set_ylabel(rf"$\mathit{{Net\ Error}}$ [{t_unit}]", color=colors_net[0], **label_style)
+        ax_top_right.tick_params(axis='y', labelcolor=colors_net[0])
 
-
-    # B. Bottom Plot: Error Per Component (Uses the FIRST mode in the list only)
-    # Visualizing component error for multiple horizons simultaneously gets too messy.
-    ax_bot = plt.subplot(gs[1], sharex=ax_top)
-    
-    primary_mode = modes[0]
-    if primary_mode == 'mean':
-        y_comp = np.mean(error_tensor, axis=1)
-        sub_title = "Component Error (Mean)"
-    elif primary_mode == 'max':
-        y_comp = np.max(error_tensor, axis=1)
-        sub_title = "Component Error (Max)"
-    elif isinstance(primary_mode, int):
-        k = primary_mode - 1
-        y_comp = error_tensor[:, k, :]
-        sub_title = f"Component Error (H={primary_mode})"
-    
-    comp_labels = ["Surge", "Sway", "YawRate", "YawAng"]
-    comp_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd']
-    
-    for i in range(4):
-        ax_bot.plot(time_steps, y_comp[:, i], color=comp_colors[i], 
-                    linewidth=1.5, alpha=0.8, label=comp_labels[i])
+        ax_top_left.legend(handles=lines_legend, loc='upper left', prop=legend_prop, ncol=2)
         
-    ax_bot.set_title(sub_title, **subtitle_style)
-    ax_bot.set_ylabel(r"$\mathit{Absolute\ Error}$", **label_style)
-    ax_bot.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
-    ax_bot.grid(True, linestyle='--', alpha=0.5)
-    ax_bot.legend(loc='upper right', prop=legend_prop if 'legend_prop' in globals() else None)
+        horizon_str = ", ".join([t[0] for t in tasks])
+        ax_top_left.set_title(f"{t_name}: Error Analysis ({mode.capitalize()} - {loop} - {horizon_str})", pad=20, **title_style)
+        ax_top_left.set_xlim(0, num_points)
+        ax_top_left.set_ylim(bottom=0); ax_top_right.set_ylim(bottom=0)
 
-    for ax in [ax_top, ax_top_r, ax_bot]: 
-        if '_force_ticks_font' in globals(): _force_ticks_font(ax)
+        # B. Bottom Plot: True Path of this Target
+        ax_bot = plt.subplot(gs[1])
+        c_path = '#2CA02C' # Green
 
-    if args.save_plot and filename:
-        # Append mode to filename
-        mode_str = "-".join(map(str, modes))
-        plt.savefig(filename + f"_{mode_str}.png", dpi=300, bbox_inches='tight')
-    if args.show_plot: plt.show()
-    plt.close()
+        # Plot the single feature trajectory
+        ax_bot.plot(time_steps, true_path_flat[:, idx], color=c_path, linewidth=2.5, label=f'True {t_name}')
+
+        ax_bot.set_ylabel(rf"$\mathit{{{t_name}}}$ [{t_unit}]", color='k', **label_style)
+        ax_bot.legend(loc='upper left', prop=legend_prop)
+        
+        ax_bot.set_title(f"True Trajectory: {t_name}", pad=20, **title_style)
+        ax_bot.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
+        ax_bot.set_xlim(0, num_points)
+        ax_bot.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
+
+        # Force Fonts
+        for ax in [ax_top_left, ax_top_right, ax_bot]: 
+            if '_force_ticks_font' in globals(): _force_ticks_font(ax)
+
+        # --- SAVING ---
+        if args.save_plot and filename:
+            # Construct filename: .../plot_error_vs_time_Surge_Velocity_global_closed.png
+            clean_name = t_name.replace(" ", "_")
+            if horizon_mode != ['mean'] and horizon_mode != ['max']:
+                h_suffix = "H_" + "_".join([str(h) for h in horizon_mode_list])
+            else:
+                h_suffix = horizon_mode_list[0]
+
+            if mode == 'local': 
+                save_path = f"{filename}_{clean_name}_{mode}_{h_suffix}.png"
+            else: 
+                save_path = f"{filename}_{clean_name}_{mode}_{loop}_{h_suffix}.png"
+            
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            
+        if args.show_plot: 
+            plt.show()
+            
+        plt.close()
 # ==========================================
 # PLOT 4: BOXPLOTS
 # ==========================================
 def plot_kinematics_boxplots(args, data, mode='global', loop='closed', filename=None):
     """
-    Boxplot of the error norm (4D) at each horizon step.
-    Replaces: plot_horizon_euclidean_boxplots
+    Generates a 2x2 grid of boxplots (one per feature).
+    Each boxplot shows the distribution of Absolute Error at each Horizon Step.
     """
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
     
-    pred_path = pred_obj['pred_path']
+    # 1. Get Real Data (Physical Units)
+    pred_path = pred_obj['pred_path'] 
     true_path = data['true_path']
     
     num_samples = min(pred_path.shape[0], true_path.shape[0])
     
-    # Calculate Norm of error vector at each step (N, H)
-    step_errors = np.linalg.norm(true_path[:num_samples] - pred_path[:num_samples], axis=2)
+    # Calculate Absolute Error per component: Shape (N, H, 4)
+    abs_error = np.abs(true_path[:num_samples] - pred_path[:num_samples])
     
-    horizon_steps = step_errors.shape[1]
-    plot_data = [step_errors[:, k] for k in range(horizon_steps)]
-    step_means = np.mean(step_errors, axis=0)
+    horizon_steps = abs_error.shape[1]
+    
+    # 2. Setup Figure (2x2 Grid)
+    fig = plt.figure(figsize=(14, 10))
+    gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
 
-    # Plot
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    box = ax.boxplot(plot_data, patch_artist=True, showfliers=False, widths=0.6,
-                     medianprops=dict(linewidth=2.5, color='#000080'))
-    
-    c_face, c_edge = '#ADD8E6', '#1F77B4'
-    for patch in box['boxes']:
-        patch.set_facecolor(c_face)
-        patch.set_edgecolor(c_edge)
-        patch.set_alpha(0.7)
+    targets = [
+        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
+        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
+        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
+        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
+    ]
 
-    x_pos = np.arange(1, horizon_steps + 1)
-    ax.plot(x_pos, step_means, marker='D', color='#D62728', linestyle='None', markersize=8, label='Mean Error')
-    
-    ax.set_title(f"Horizon Error Distribution (State Norm) - {mode.capitalize()}", **title_style)
-    ax.set_xlabel(r"$\mathit{Horizon\ Step}$", **label_style)
-    ax.set_ylabel(r"$\mathit{Error\ Norm}$", **label_style)
-    ax.grid(True, linestyle='--', alpha=0.5)
-    
-    if '_force_ticks_font' in globals(): _force_ticks_font(ax)
-    ax.legend(prop=legend_prop if 'legend_prop' in globals() else None)
+    # 3. Loop through targets
+    for i, tgt in enumerate(targets):
+        row, col = i // 2, i % 2
+        ax = fig.add_subplot(gs[row, col])
+        
+        idx = tgt['idx']
+        
+        # Prepare Data for Boxplot: List of (N,) arrays, one per horizon step
+        # Extract error for specific feature 'idx'
+        feature_error = abs_error[:, :, idx] 
+        plot_data = [feature_error[:, k] for k in range(horizon_steps)]
+        
+        # Calculate Mean for the Diamond marker
+        step_means = np.mean(feature_error, axis=0)
 
+        # Draw Boxplot
+        box = ax.boxplot(plot_data, patch_artist=True, showfliers=False, widths=0.6,
+                         medianprops=dict(linewidth=2.0, color='#000080')) # Navy Median
+        
+        # Style Boxes
+        c_face = '#ADD8E6' # Light Blue
+        c_edge = '#1F77B4' # Dark Blue
+        for patch in box['boxes']:
+            patch.set_facecolor(c_face)
+            patch.set_edgecolor(c_edge)
+            patch.set_alpha(0.7)
+            
+        # Plot Mean Markers
+        x_pos = np.arange(1, horizon_steps + 1)
+        ax.plot(x_pos, step_means, marker='D', color='#D62728', linestyle='None', 
+                markersize=6, label='Mean Error')
+
+        # Labels & Grid
+        ax.set_title(tgt['name'], **subtitle_style)
+        ax.set_ylabel(rf"$\mathit{{Abs\ Error}}$ [{tgt['unit']}]", **label_style)
+        
+        # Only X-label on bottom rows
+        if row == 1: 
+            ax.set_xlabel(r"$\mathit{Horizon\ Step}$", **label_style)
+            
+        ax.grid(True, linestyle='--', alpha=0.5)
+        if '_force_ticks_font' in globals(): _force_ticks_font(ax)
+
+    # Add Legend to the first plot only (to avoid clutter)
+    # Creating a custom legend handle for the box
+    from matplotlib.patches import Patch
+    legend_elements = [
+        Patch(facecolor='#ADD8E6', edgecolor='#1F77B4', label='IQR (Distribution)'),
+        Line2D([0], [0], color='#000080', linewidth=2.0, label='Median'),
+        Line2D([0], [0], marker='D', color='#D62728', linestyle='None', markersize=6, label='Mean'),
+    ]
+    ax = fig.axes[0]
+    ax.legend(handles=legend_elements, loc='upper left', prop=legend_prop)
+
+    # Title
+    fig.suptitle(f"Horizon Error Distribution ({mode.capitalize()}-{loop})", y=0.96, **title_style)
     if args.save_plot and filename:
+        _ensure_dir_exists(filename) # <--- FIXED HERE
         plt.savefig(filename + f"_boxplots_{mode}.png", dpi=300, bbox_inches='tight')
     if args.show_plot: plt.show()
     plt.close()

@@ -132,11 +132,11 @@ def run(args):
 
     # Global Open Plots
     plot_kinematics_time_series(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_kinematics_open.png")
-    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
 
     #Global Closed Plots
     plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_kinematics_closed.png")
-    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_error_vs_time")
+    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
     
     scalers = [x_scaler, y_scaler]
     qnn_dict = {"qc": qc, "input_params": input_params, "weight_params": weight_params}
