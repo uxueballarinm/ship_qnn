@@ -578,6 +578,8 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     num_samples = x_test.shape[0]; horizon = args.horizon        
     num_targets = len(args.targets)
 
+    direct_updates = []
+    physics_updates = []
     update_rules = {} 
     
     for t_idx, t_name in enumerate(args.targets):
@@ -587,9 +589,9 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         # --- LOGIC 1: Primary Update (Direct Match) ---
         if t_name in args.features:
             f_idx = args.features.index(t_name)
-            # If target is Delta and Feature is Delta -> DIRECT
-            # If target is Motion and Feature is Motion -> DIRECT
+            # If target is Delta and Feature is Delta -> DIRECT and If target is Motion and Feature is Motion -> DIRECT
             update_rules[t_idx].append((f_idx, "DIRECT"))
+            direct_updates.append(t_name)
         secondary_name = None
         mode = None
         
@@ -599,18 +601,34 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
             if clean in args.features: 
                 secondary_name = clean
                 mode = "INTEGRATE"
+                physics_updates.append(f"{clean} (Integrated)")
         else:
             # We have Motion, look for Delta to Differentiate
             delta_ver = f"delta {t_name}"
             if delta_ver in args.features: 
                 secondary_name = delta_ver
                 mode = "DIFF"
+                physics_updates.append(f"{delta_ver} (Differentiated)")
         
         if secondary_name:
             f_idx_sec = args.features.index(secondary_name)
             update_rules[t_idx].append((f_idx_sec, mode))
+    driven_feats = set()
+    for rules in update_rules.values():
+        for f_idx, _ in rules:
+            driven_feats.add(f_idx)
     num_driven = len(update_rules)
-    feat_names = args.features 
+    feat_names = args.features
+    recursive_ratio = num_driven / len(feat_names)
+    if num_driven == 0:
+        print(f"  > {C_YELLOW}Fully Open-Loop (No recursion).{C_RESET}")
+        preds_full = model.forward(x_test, best_params)
+        return preds_full, 0.0
+    print(f"  > Recursive Loop Active ({num_driven}/{len(feat_names)} features driven)")
+    if direct_updates:
+        print(f"    Direct Feedback:  {', '.join(direct_updates)}")
+    if physics_updates:
+        print(f"    Physics Feedback: {', '.join(physics_updates)}")
     # 2. Initialization
     recursive_preds = np.zeros((num_samples, horizon, num_targets))
     curr_window = x_test[0:1, :, :].copy()
@@ -618,7 +636,7 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     
     # Trackers for differentiation
     last_pred_values = np.zeros(num_targets) 
-
+    
     # 3. Main Loop
     for i in range(num_samples):
         preds_full = model.forward(curr_window, best_params)
@@ -646,8 +664,6 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
                     old_val = last_feat_real[0, f_idx]
                     next_input_real[0, f_idx] = old_val + pred_val
                 elif mode == "DIFF":
-                    # New Delta = Pred Pos - Old Pos (approx as Pred Pos - Last Pred Pos)
-                    # Note: To match hardcoded logic exactly, we use (Current Pred - Last Iteration Pred)
                     if i == 0: diff_val = pred_val 
                     else: diff_val = pred_val - last_pred_values[t_idx]
                     next_input_real[0, f_idx] = diff_val
@@ -658,7 +674,6 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         
         new_row_norm = x_scaler.transform(next_input_real)
         curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
-    recursive_ratio = num_driven / len(feat_names)
 
     return recursive_preds, recursive_ratio
 
