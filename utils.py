@@ -1079,7 +1079,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
 
     # Text log
     log_filename = "logs/experiment_log.txt"
-    short_feats = ", ".join(map_names(args.features, reverse=True))
+    short_feats = ", ".join(map_names(args.features, reverse=False))
     encd = getattr(args, 'encoding', 'N/A')
     ansatz = getattr(args, 'ansatz', 'N/A')
     ent = getattr(args, 'entangle', 'N/A')
