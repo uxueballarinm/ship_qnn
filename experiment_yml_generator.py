@@ -7,7 +7,6 @@ import itertools
 # ==========================================
 
 # A. FIXED PARAMS:
-# These values are identical for EVERY experiment in EVERY file.
 FIXED_PARAMS = {
     "maxiter": 5000,                    
     "optimizer": "cobyla",
@@ -19,24 +18,29 @@ FIXED_PARAMS = {
     "reconstruct_val": False,         
     "save_plot": True,
     "entangle": "reverse_linear",
-    "ansatz": "efficientsu2"
+    "ansatz": "efficientsu2",
+    # CRITICAL: Disable shuffling. 
+    # The circuit will process features in the exact order listed below.
+    "reorder": False,
+    "select_features": ["wv", "sv", "yr", "ya", "rarad"]
 }
 
 # B. SPLIT BY FILE: 
-# A separate YAML file will be created for every combination of these.
-# The filename will be generated from these values (e.g., "ugates_circular.yml").
 SPLIT_BY_FILE = {
-    "reps": [1, 3, 5]
+    "run": list(range(5))
 }
 
 # C. VARY WITHIN FILE:
-# These variations will be listed INSIDE each YAML file.
-# e.g., one file will contain experiments for reps=1, reps=3, reps=5.
+# Logic: Run all seeds for Set 1, then all seeds for Set 2.
 VARY_WITHIN_FILE = {
-    "select_features": [["wv", "sv", "yr", "ya", "radeg", "rarad"],["dwv", "dsv", "dyr", "dya", "radeg", "rarad"]],
+    "map": [
+        [0, 1, 2, 4, 3, -1],  # Order 1: Kinematic
+        [4, 2, 1, 0, 3, -1],  # Order 2: Steering
+        [3, 0, 1, 2, 4, -1]   # Order 3: State-Space
+    ]
 }
 
-OUTPUT_DIR = "experiment_definitions/delta_or_position"
+OUTPUT_DIR = "experiment_definitions/fixed_orders_no_radeg"
 
 # ==========================================
 # 2. GENERATOR LOGIC (Do not edit below)
