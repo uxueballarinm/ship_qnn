@@ -568,141 +568,244 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
 # ==============================================================================
 # 5. RECURSIVE EVALUATION & PLOTTING (PUBLIC)
 # ==============================================================================
-def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
-    """
-    Performs Recursive 'Fan' Prediction with Automatic Physics Logic.
-    Handles 4 update modes based on Target vs. Feature names.
-    """
+# def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
+#     """
+#     Performs Recursive 'Fan' Prediction with Automatic Physics Logic.
+#     Handles 4 update modes based on Target vs. Feature names.
+#     """
     
-    # 1. Setup
-    num_samples = x_test.shape[0] 
-    horizon = args.horizon        
-    num_targets = len(args.targets)
+#     # 1. Setup
+#     num_samples = x_test.shape[0]; horizon = args.horizon        
+#     num_targets = len(args.targets)
 
-    # 2. Physics Mapping & Initialization
-    last_pred_real = np.zeros(num_targets) 
-    update_rules = {} 
+#     # 2. Physics Mapping & Initialization
+#     last_pred_real = np.zeros(num_targets) 
+#     update_rules = {} 
 
-    # Lists for logging
+#     # Lists for logging
+#     direct_updates = []
+#     physics_updates = []
+    
+#     for t_idx, t_name in enumerate(args.targets):
+        
+#         # A. Identify if Target is 'Delta' type
+#         is_target_delta = "delta" in t_name.lower() or args.predict == 'delta'
+        
+#         # B. Find Matching Feature
+#         match_name = None
+#         if t_name in args.features:
+#             match_name = t_name
+        
+#         if match_name is None:
+#             if is_target_delta: 
+#                 # Target is 'delta X', look for 'X'
+#                 clean = t_name.replace("delta ", "").strip()
+#                 if clean in args.features: match_name = clean
+#             else:
+#                 # Target is 'X', look for 'delta X'
+#                 delta_ver = f"delta {t_name}"
+#                 if delta_ver in args.features: match_name = delta_ver
+
+#         # C. Determine Logic
+#         if match_name:
+#             f_idx = args.features.index(match_name)
+#             is_feature_delta = "delta" in match_name.lower()
+
+#             mode = "UNKNOWN"
+#             if not is_target_delta and not is_feature_delta:
+#                 mode = "DIRECT"        
+#                 direct_updates.append(f"Pred [{t_name}] -> Replaces [{match_name}]")
+#             elif is_target_delta and not is_feature_delta:
+#                 mode = "INTEGRATE"     
+#                 physics_updates.append(f"Pred [{t_name}] -> Integrates to update [{match_name}]")
+#             elif is_target_delta and is_feature_delta:
+#                 mode = "DIRECT_DELTA"  
+#                 direct_updates.append(f"Pred [{t_name}] -> Replaces [{match_name}]")
+#             elif not is_target_delta and is_feature_delta:
+#                 mode = "DIFF"          
+#                 physics_updates.append(f"Pred [{t_name}] -> Differentiates to update [{match_name}]")
+
+#             update_rules[t_idx] = (f_idx, mode)
+            
+#         else:
+#             pass
+
+#     # --- PRINT SUMMARY ---
+#     num_driven = len(update_rules)
+    
+#     if num_driven == 0:
+#         print(f"  > {C_YELLOW}Fully Open-Loop (No recursion).{C_RESET}")
+#     else:
+#         print(f"  > Recursive Loop Active ({num_driven} targets driving input features)")
+#         if direct_updates:
+#             print(f"    Direct Feedback:  {', '.join(direct_updates)}")
+#         if physics_updates:
+#             print(f"    Physics Feedback: {', '.join(physics_updates)}")
+
+#     # 3. Initialization
+#     recursive_preds = np.zeros((num_samples, horizon, num_targets))
+    
+#     # Optimization: If open loop, just run forward once
+#     if num_driven == 0:
+#         preds_full = model.forward(x_test, best_params)
+#         return preds_full, 0.0
+
+#     curr_window = x_test[0:1, :, :] 
+#     last_feat_real = x_scaler.inverse_transform(curr_window[:, -1, :]) # (1, F)
+    
+#     # 4. Main Loop
+#     for i in range(num_samples):
+        
+#         # A. Predict
+#         preds_full = model.forward(curr_window, best_params) # (1, H, T)
+#         recursive_preds[i] = preds_full[0]
+
+#         # B. Recursion Setup
+#         next_gt_idx = min(i + 1, num_samples - 1)
+#         next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] 
+        
+#         # Denormalize
+#         next_input_real = x_scaler.inverse_transform(next_gt_features_norm) # (1, F)
+        
+#         # Get immediate prediction
+#         pred_next_step_norm = preds_full[:, 0, :]
+#         if y_scaler:
+#             pred_step_real = y_scaler.inverse_transform(pred_next_step_norm) 
+#         else:
+#             pred_step_real = pred_next_step_norm
+            
+#         # C. Update Loop
+#         for t_idx, (f_idx, mode) in update_rules.items():
+#             pred_val = pred_step_real[0, t_idx]
+            
+#             if mode == "DIRECT" or mode == "DIRECT_DELTA":
+#                 next_input_real[0, f_idx] = pred_val
+                
+#             elif mode == "INTEGRATE":
+#                 # Vel_new = Vel_old + Pred_Delta
+#                 old_val = last_feat_real[0, f_idx]
+#                 next_input_real[0, f_idx] = old_val + pred_val
+                
+#             elif mode == "DIFF":
+#                 # Delta_new = Pred_Vel - Last_Pred_Vel
+#                 if i == 0: diff_val = pred_val 
+#                 else: diff_val = pred_val - last_pred_real[t_idx]
+#                 next_input_real[0, f_idx] = diff_val
+
+#         # Update trackers
+#         last_pred_real = pred_step_real[0] 
+#         last_feat_real = next_input_real   
+
+#         # D. Normalize & Shift
+#         new_row_norm = x_scaler.transform(next_input_real)
+#         curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
+
+#     recursive_ratio = num_driven / num_targets if num_targets > 0 else 0
+#     return recursive_preds, recursive_ratio
+
+
+def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
+    
+    num_samples = x_test.shape[0]; horizon = args.horizon
+    feat_names = args.features 
+    def get_idx(name): return feat_names.index(name) if name in feat_names else None
+    idx_wv, idx_sv, idx_yr, idx_ya = get_idx('Surge Velocity'), get_idx('Sway Velocity'), get_idx('Yaw Rate'), get_idx('Yaw Angle')
+    idx_dwv, idx_dsv, idx_dyr, idx_dya = get_idx('delta Surge Velocity'), get_idx('delta Sway Velocity'), get_idx('delta Yaw Rate'), get_idx('delta Yaw Angle')
+
+    if args.predict == 'motion' and (idx_wv is None or idx_sv is None or idx_yr is None or idx_ya is None):
+        print(f"  > {C_YELLOW}WARNING: Model cannot predict absolute kinematics without input kinematics features.{C_RESET}")
+
     direct_updates = []
     physics_updates = []
-    
-    for t_idx, t_name in enumerate(args.targets):
-        
-        # A. Identify if Target is 'Delta' type
-        is_target_delta = "delta" in t_name.lower() or args.predict == 'delta'
-        
-        # B. Find Matching Feature
-        match_name = None
-        if t_name in args.features:
-            match_name = t_name
-        
-        if match_name is None:
-            if is_target_delta: 
-                # Target is 'delta X', look for 'X'
-                clean = t_name.replace("delta ", "").strip()
-                if clean in args.features: match_name = clean
-            else:
-                # Target is 'X', look for 'delta X'
-                delta_ver = f"delta {t_name}"
-                if delta_ver in args.features: match_name = delta_ver
+    if args.predict == 'delta':
+        if idx_dwv is not None: direct_updates.append('delta Surge Velocity')
+        if idx_dsv is not None: direct_updates.append('delta Sway Velocity')
+        if idx_dyr is not None: direct_updates.append('delta Yaw Rate')
+        if idx_dya is not None: direct_updates.append('delta Yaw Angle')
+        if idx_wv is not None: physics_updates.append('Surge Velocity(integrated from delta Surge Velocity)')
+        if idx_sv is not None: physics_updates.append('Sway Velocity(integrated from delta Sway Velocity)')
+        if idx_yr is not None: physics_updates.append('Yaw Rate(integrated from delta Yaw Rate)')
+        if idx_ya is not None: physics_updates.append('Yaw Angle(integrated from delta Yaw Angle)')
+    else: # motion
+        if idx_wv is not None: direct_updates.append('Surge Velocity')
+        if idx_sv is not None: direct_updates.append('Sway Velocity')
+        if idx_yr is not None: direct_updates.append('Yaw Rate')
+        if idx_ya is not None: direct_updates.append('Yaw Angle')
+        if idx_dwv is not None: physics_updates.append('delta Surge Velocity (differentiated from Surge Velocity)')
+        if idx_dsv is not None: physics_updates.append('delta Sway Velocity (differentiated from Sway Velocity)')
+        if idx_dyr is not None: physics_updates.append('delta Yaw Rate (differentiated from Yaw Rate)')
+        if idx_dya is not None: physics_updates.append('delta Yaw Angle (differentiated from Yaw Angle)')
 
-        # C. Determine Logic
-        if match_name:
-            f_idx = args.features.index(match_name)
-            is_feature_delta = "delta" in match_name.lower()
+    num_driven = len(direct_updates) + len(physics_updates)
+    total_feats = len(feat_names)
 
-            mode = "UNKNOWN"
-            if not is_target_delta and not is_feature_delta:
-                mode = "DIRECT"        
-                direct_updates.append(f"Pred [{t_name}] -> Replaces [{match_name}]")
-            elif is_target_delta and not is_feature_delta:
-                mode = "INTEGRATE"     
-                physics_updates.append(f"Pred [{t_name}] -> Integrates to update [{match_name}]")
-            elif is_target_delta and is_feature_delta:
-                mode = "DIRECT_DELTA"  
-                direct_updates.append(f"Pred [{t_name}] -> Replaces [{match_name}]")
-            elif not is_target_delta and is_feature_delta:
-                mode = "DIFF"          
-                physics_updates.append(f"Pred [{t_name}] -> Differentiates to update [{match_name}]")
-
-            update_rules[t_idx] = (f_idx, mode)
-            
-        else:
-            pass
-
-    # --- PRINT SUMMARY ---
-    num_driven = len(update_rules)
-    
     if num_driven == 0:
-        print(f"  > {C_YELLOW}Fully Open-Loop (No recursion).{C_RESET}")
-    else:
-        print(f"  > Recursive Loop Active ({num_driven} targets driving input features)")
-        if direct_updates:
-            print(f"    Direct Feedback:  {', '.join(direct_updates)}")
-        if physics_updates:
-            print(f"    Physics Feedback: {', '.join(physics_updates)}")
-
-    # 3. Initialization
-    recursive_preds = np.zeros((num_samples, horizon, num_targets))
-    
-    # Optimization: If open loop, just run forward once
-    if num_driven == 0:
+        print("  > Fully Open-Loop (No recursion).")
         preds_full = model.forward(x_test, best_params)
         return preds_full, 0.0
 
-    curr_window = x_test[0:1, :, :] 
-    last_feat_real = x_scaler.inverse_transform(curr_window[:, -1, :]) # (1, F)
-    
-    # 4. Main Loop
-    for i in range(num_samples):
-        
-        # A. Predict
-        preds_full = model.forward(curr_window, best_params) # (1, H, T)
-        recursive_preds[i] = preds_full[0]
+    print(f"  > Recursive Loop Active ({num_driven}/{total_feats} features)")
+    if direct_updates:
+        print(f"    Direct Feedback: {', '.join(direct_updates)}")
+    if physics_updates:
+        print(f"    Physics Feedback: {', '.join(physics_updates)}")
 
-        # B. Recursion Setup
+    recursive_ratio = num_driven / total_feats
+    
+    curr_window = x_test[0:1, :, :] 
+    last_step_real = x_scaler.inverse_transform(curr_window[:, -1, :])
+    recursive_preds = np.zeros((num_samples, horizon, 2))
+    last_px, last_py = 0.0, 0.0
+
+    for i in range(num_samples):
+        preds_full = model.forward(curr_window, best_params)
+        recursive_preds[i] = preds_full[0]
+        pred_step = preds_full[:, 0, :] 
+        
         next_gt_idx = min(i + 1, num_samples - 1)
         next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] 
-        
-        # Denormalize
-        next_input_real = x_scaler.inverse_transform(next_gt_features_norm) # (1, F)
-        
-        # Get immediate prediction
-        pred_next_step_norm = preds_full[:, 0, :]
-        if y_scaler:
-            pred_step_real = y_scaler.inverse_transform(pred_next_step_norm) 
-        else:
-            pred_step_real = pred_next_step_norm
-            
-        # C. Update Loop
-        for t_idx, (f_idx, mode) in update_rules.items():
-            pred_val = pred_step_real[0, t_idx]
-            
-            if mode == "DIRECT" or mode == "DIRECT_DELTA":
-                next_input_real[0, f_idx] = pred_val
-                
-            elif mode == "INTEGRATE":
-                # Vel_new = Vel_old + Pred_Delta
-                old_val = last_feat_real[0, f_idx]
-                next_input_real[0, f_idx] = old_val + pred_val
-                
-            elif mode == "DIFF":
-                # Delta_new = Pred_Vel - Last_Pred_Vel
-                if i == 0: diff_val = pred_val 
-                else: diff_val = pred_val - last_pred_real[t_idx]
-                next_input_real[0, f_idx] = diff_val
 
-        # Update trackers
-        last_pred_real = pred_step_real[0] 
-        last_feat_real = next_input_real   
+        if y_scaler: pred_step_real = y_scaler.inverse_transform(pred_step)
+        else: pred_step_real = pred_step
 
-        # D. Normalize & Shift
-        new_row_norm = x_scaler.transform(next_input_real)
+        next_gt_real = x_scaler.inverse_transform(next_gt_features_norm)
+        new_row_real = np.copy(next_gt_real)
+        
+        if args.predict == 'delta':
+            dwv, dsv,dyr,dya = pred_step_real[0, 0], pred_step_real[0, 1], pred_step_real[0, 2], pred_step_real[0, 3]
+            if idx_dwv is not None: new_row_real[0, idx_dwv] = dwv
+            if idx_dsv is not None: new_row_real[0, idx_dsv] = dsv
+            if idx_dyr is not None: new_row_real[0, idx_dyr] = dyr
+            if idx_dya is not None: new_row_real[0, idx_dya] = dya
+            if idx_wv is not None: new_row_real[0, idx_wv] = last_step_real[0, idx_wv] + dwv
+            if idx_sv is not None: new_row_real[0, idx_sv] = last_step_real[0, idx_sv] + dsv
+            if idx_yr is not None: new_row_real[0, idx_yr] = last_step_real[0, idx_yr] + dyr
+            if idx_ya is not None: new_row_real[0, idx_ya] = last_step_real[0, idx_ya] + dya
+        else: 
+            wv, sv, yr, ya = pred_step_real[0, 0], pred_step_real[0, 1], pred_step_real[0, 2], pred_step_real[0, 3]
+            if idx_wv is not None: new_row_real[0, idx_wv] = wv
+            if idx_sv is not None: new_row_real[0, idx_sv] = sv
+            if idx_yr is not None: new_row_real[0, idx_yr] = yr
+            if idx_ya is not None: new_row_real[0, idx_ya]
+            if idx_dwv is not None: 
+                new_row_real[0, idx_dwv] = wv- last_wv
+                last_wv = wv
+            if idx_dsv is not None:
+                new_row_real[0, idx_dsv] = sv - last_sv 
+                last_sv = sv
+            if idx_dyr is not None:
+                new_row_real[0, idx_dyr] = yr - last_yr 
+                last_yr = yr
+            if idx_dya is not None:
+                new_row_real[0, idx_dya] = ya - last_ya 
+                last_ya = ya
+
+        last_step_real = new_row_real
+        new_row_norm = x_scaler.transform(new_row_real)
         curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
 
-    recursive_ratio = num_driven / num_targets if num_targets > 0 else 0
     return recursive_preds, recursive_ratio
+    
 
 def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     """Runs BOTH one-step (Teacher Forcing) and recursive (Dead Reckoning) evaluations."""
