@@ -2,16 +2,16 @@ import pandas as pd
 import numpy as np
 
 # 1. Load Data
-data_path = "datasets\zigzag_10_40_ood_reduced_2_s.csv"
+data_path = "datasets\zigzag_11_11_ind_reduced_2_s.csv"
 df = pd.read_csv(data_path)
 
 # 2. Define Inputs (X) and Targets (Y)
 # Adjust these lists based on what your model actually uses!
-feature_names = ["Position X", "Position Y", "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)", "OOD Label"]
+feature_names = ["Position X", "Position Y", "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)"]
 
 # We usually predict the 'Next Step', so let's shift the targets
 # to measure predictive power.
-targets = ["Position X", "Position Y"] # Or 'delta x', 'delta y'
+targets = ["Yaw Angle"]# "Surge Velocity","Sway Velocity", "Yaw Rate", "Yaw Angle"] # Or 'delta x', 'delta y'
 df_features = df[feature_names].iloc[:-1].reset_index(drop=True)
 df_targets = df[targets].iloc[1:].reset_index(drop=True)
 
