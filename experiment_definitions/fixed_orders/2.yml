@@ -2,7 +2,7 @@
   optimizer: cobyla
   encoding: compact
   model: vanilla
-  predict: delta
+  predict: motion
   window_size: 5
   horizon: 5
   reconstruct_val: false
@@ -29,7 +29,7 @@
   optimizer: cobyla
   encoding: compact
   model: vanilla
-  predict: delta
+  predict: motion
   window_size: 5
   horizon: 5
   reconstruct_val: false
@@ -51,7 +51,7 @@
   optimizer: cobyla
   encoding: compact
   model: vanilla
-  predict: delta
+  predict: motion
   window_size: 5
   horizon: 5
   reconstruct_val: false
