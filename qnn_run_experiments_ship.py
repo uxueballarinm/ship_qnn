@@ -13,7 +13,7 @@ except ImportError:
 # --- DEFAULTS (Must match your argparse defaults) ---
 DEFAULTS = {
     'data': "datasets\zigzag_11_11_ind_reduced_2_s.csv",
-    'select_features': ['dwv','dsvdyr','dya','rarad'],
+    'select_features': ['wv','sv','yr','ya','rarad'],
     'drop_features': None,
     'window_size': 5,
     'horizon': 5,          
@@ -35,7 +35,8 @@ DEFAULTS = {
     'tolerance': None,
     'show_plot': False,
     'save_plot': True,   
-    'run': 0
+    'run': 0,
+    'target': ["wv","sv","yr","ya"],
 }
 
 class ExperimentArgs:

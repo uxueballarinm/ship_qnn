@@ -1,0 +1,20 @@
+
+- maxiter: 3000 # --- 1. Reduce Complexity here ---
+  window_size: 4       # Reduced from 5. (Huge speedup: 2^3 vs 2^5 state space)
+  select_features:        # Remove redundant features
+  - wv                    # Surge
+  - sv                    # Sway
+  - yr                    # Yaw Rate
+  - ya                    # Yaw Angle
+  - rarad                 # Rudder (Control is crucial)
+  # Removed 'vu' (Speed U) because it is redundant (calculated from wv and sv)
+
+  # --- 2. Increase Power here (using the saved time) ---
+  reps: 3                # Increased from 1. (Crucial for non-linear dynamics)
+  encoding: 'parallel'     # Keep compact (fastest)
+  ansatz: 'efficientsu2'  # Keep this (good expressivity)
+  entangle: 'circular'    # Slightly better connectivity than reverse_linear
+
+  # --- 3. Training Settings ---
+  predict: 'motion'       # Good choice for low-reps (smoother target)
+  optimizer: 'cobyla'

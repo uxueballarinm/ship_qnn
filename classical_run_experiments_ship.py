@@ -16,13 +16,13 @@ except ImportError:
 # These values will be used if parameters are missing in the YAML
 DEFAULTS = {
     # Data & Task
-    'data': "datasets/zigzag_10_40_ood_reduced_2_s.csv",
-    'select_features': None,
+    'data': "datasets\zigzag_11_11_ind_reduced_2_s.csv",
+    'select_features': ['wv','sv','yr','ya','rarad'],
     'drop_features': None,   
     'window_size': 5,
     'horizon': 5,         
     'testing_fold': 3,
-    'predict': 'delta',
+    'predict': 'motion',
     'norm': True,
     'reconstruct_train': False,
     'reconstruct_val': False, 
@@ -46,7 +46,8 @@ DEFAULTS = {
     # Dummy args
     'ansatz': 'lstm',
     'entangle': 'none',
-    'reps': 1
+    'reps': 1,
+    'target': ["wv","sv","yr","ya"],
 }
 
 class ExperimentArgs:

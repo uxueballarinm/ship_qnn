@@ -1,0 +1,14 @@
+- maxiter: 5000
+  predict: motion
+  window_size: 5
+  horizon: 5
+  reconstruct_val: false
+  save_plot: true
+  reps: 1
+  select_features:
+  - wv
+  - sv
+  - yr
+  - ya
+  - rarad
+  - vu
