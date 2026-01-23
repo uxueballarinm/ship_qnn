@@ -1,0 +1,77 @@
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 10000
+  save_plot: true
+  learning_rate: 0.05
+  batch_size: 64
+  perturbation: 0.1
+  initialization: identity
+  heads_config:
+  - features: [wv]
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, -1, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, 1, 2, 3, -1, -1]
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 10000
+  save_plot: true
+  heads_config:
+  - features: [wv]
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, -1, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [3, 0, 1, 2, -1, -1]
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 10000
+  save_plot: true
+  heads_config:
+  - features: [wv]
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: ugates
+    entangle: reverse_linear
+    reorder: false
+    map: [0, -1, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: ugates
+    entangle: reverse_linear
+    reorder: false
+    map: [0, 1, 2, 3, -1, -1]
+

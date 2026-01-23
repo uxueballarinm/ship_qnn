@@ -1,0 +1,142 @@
+# -------------------------------------------------------------------------
+# EXPERIMENT 1: Stable Baseline
+# Safe Learning Rate (0.01), Standard Batch (64), Low Perturbation (0.05)
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 3000                 # Shortened for tuning (3000 is enough to see the trend)
+  save_plot: true
+  initialization: identity
+  
+  # --- TUNING PARAMETERS ---
+  learning_rate: 0.01
+  batch_size: 64
+  perturbation: 0.05
+  # -------------------------
+
+  heads_config:
+  - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, 4, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, -1, -1]
+
+# -------------------------------------------------------------------------
+# EXPERIMENT 2: Aggressive Learning Rate
+# Increased LR (0.05). If Exp 1 is a flat line, this will fix it.
+# If this oscillates (goes up and down), then 0.01 (Exp 1) was better.
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 3000
+  save_plot: true
+  initialization: identity
+  
+  # --- TUNING PARAMETERS ---
+  learning_rate: 0.05           # <--- INCREASED (5x faster)
+  batch_size: 64
+  perturbation: 0.05
+  # -------------------------
+
+  heads_config:
+  - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, 4, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, -1, -1]
+
+# -------------------------------------------------------------------------
+# EXPERIMENT 3: High Stability (Large Batch)
+# Doubled Batch Size (128). This makes the gradient very smooth.
+# If Exp 1 is "jittery", this will smooth it out.
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 3000
+  save_plot: true
+  initialization: identity
+  
+  # --- TUNING PARAMETERS ---
+  learning_rate: 0.01
+  batch_size: 128               # <--- INCREASED (Smoother Gradients)
+  perturbation: 0.05
+  # -------------------------
+
+  heads_config:
+  - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, 4, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, -1, -1]
+
+# -------------------------------------------------------------------------
+# EXPERIMENT 4: Wide Perturbation
+# Increased Perturbation (0.1). SPSA "shakes" the parameters harder.
+# Use this if Exp 1 gets stuck in a local minimum early.
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 3000
+  save_plot: true
+  initialization: identity
+  
+  # --- TUNING PARAMETERS ---
+  learning_rate: 0.01
+  batch_size: 64
+  perturbation: 0.1             # <--- INCREASED (Larger probe radius)
+  # -------------------------
+
+  heads_config:
+  - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, 4, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    map: [0, 1, 2, 3, -1, -1]

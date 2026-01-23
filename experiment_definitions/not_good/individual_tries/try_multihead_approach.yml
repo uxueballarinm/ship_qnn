@@ -8,7 +8,7 @@
   
   model: multihead
   predict: motion
-  optimizer: cobyla
+  optimizer: spsa
   maxiter: 2000
   save_plot: true
 

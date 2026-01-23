@@ -256,8 +256,9 @@ if __name__=="__main__":
     parser.add_argument('-opt','--optimizer', type=str, default='cobyla', choices=['cobyla', 'spsa']) # cobyla
     parser.add_argument('--maxiter', type=int, default=10000)
     parser.add_argument('-tol', '--tolerance', type=float, default=None)
-    # parser.add_argument('-lr','--learning_rate', type = float, default = 0.01)
-    # parser.add_argument('-p','--perturbation',type = float, default = 0.01)
+    parser.add_argument('-lr','--learning_rate', type = float, default = 0.01)
+    parser.add_argument('-p','--perturbation',type = float, default = 0.1)
+    parser.add_argument('--batch_size', type=int, default=32, help="Batch size for optimizers that support mini-batching (e.g., SPSA). Ignored for full-batch optimizers like COBYLA.")
 
     parser.add_argument('--show_plot', type = str2bool, default=False)
     parser.add_argument('--save_plot', type = str2bool, default=True)

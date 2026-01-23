@@ -34,10 +34,13 @@ DEFAULTS = {
     'optimizer': 'cobyla',
     'maxiter': 10000,
     'tolerance': None,
+    'batch_size': 32,
+    'learning_rate': 0.01,
+    'perturbation': 0.1,
     'show_plot': False,
     'save_plot': True,   
     'run': 0,
-    'target': ["wv","sv","yr","ya"],
+    'targets': None,
 }
 
 class ExperimentArgs:

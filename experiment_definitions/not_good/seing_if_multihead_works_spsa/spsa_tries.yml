@@ -1,0 +1,105 @@
+# -------------------------------------------------------------------------
+# EXPERIMENT 1: "The Smart Surge" (Full Context Input)
+# Hypothesis: Knowing turn data (sv, yr) helps predict Surge drag.
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 5000
+  learning_rate: 0.01
+  batch_size: 64
+  perturbation: 0.05
+  initialization: identity      # <--- Important!
+  save_plot: true
+  heads_config:
+  # Head 1: Input 5 features -> Map needs 6 slots [0,1,2,3,4,-1]
+  - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, 1, 2, 3, 4, -1]   # Correct length for 5 features
+  # Head 2: Standard Turner
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, 1, 2, 3, -1, -1]
+
+# -------------------------------------------------------------------------
+# EXPERIMENT 2: "The Lonely Surge" (Baseline Input)
+# Hypothesis: Does Head 1 actually NEED the extra info? 
+# We compare this against Exp 1.
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 5000
+  learning_rate: 0.01
+  batch_size: 64
+  perturbation: 0.05
+  initialization: identity      # <--- ADDED (Was missing)
+  save_plot: true
+  heads_config:
+  # Head 1: Input ONLY 'wv' -> Map needs 3 slots [0, -1, -1]
+  - features: ['wv']           # <--- FIXED: Only 1 feature here
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, -1, -1]           # Correct length for 1 feature
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [3, 0, 1, 2, -1, -1]
+
+# -------------------------------------------------------------------------
+# EXPERIMENT 3: "The Spider Web" (Full Entanglement)
+# Hypothesis: Rudder needs to talk DIRECTLY to Surge, not through neighbors.
+# -------------------------------------------------------------------------
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: delta
+  optimizer: spsa
+  maxiter: 5000
+  learning_rate: 0.01
+  batch_size: 64
+  perturbation: 0.05
+  initialization: identity
+  save_plot: true
+  heads_config:
+  # Head 1: Input 5 features -> Full Entanglement
+  - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+    output_dim: 1
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: full             # <--- CHANGE: Connects everything to everything
+    reorder: false
+    map: [0, 1, 2, 3, 4, -1]
+    
+  # Head 2: Turning
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: full             # <--- CHANGE: Stronger correlations for turning too
+    reorder: false
+    map: [0, 1, 2, 3, -1, -1]

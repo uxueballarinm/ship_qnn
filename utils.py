@@ -485,36 +485,60 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     best_params = None
     
     train_history, val_history = [], []
+    optimizer_name = args.optimizer.upper()
+    use_batching = (optimizer_name == 'SPSA')
+    # Use default 32 if not specified in args
+    batch_size = getattr(args, 'batch_size', 32)
+    
+    num_train_samples = x_train.shape[0]
     def objective_function(params):
         nonlocal best_val_loss, best_params
+        if use_batching:
+            indices = np.random.choice(num_train_samples, size=batch_size, replace=False)
+            x_input, y_target = x_train[indices], y_train[indices]
+        else:
+            x_input,y_target = x_train, y_train
+        preds = model.forward(x_input, params)
+        train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train, scaler)
 
-        preds = model.forward(x_train, params)
-        train_mse = _compute_loss(args, preds, y_train, args.reconstruct_train, scaler)
-
-        val_preds = model.forward(x_val, params)
-        val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, scaler)
-        
+        check_val = True 
+        if use_batching and len(train_history) % 10 != 0:
+            check_val = False
+        if check_val:
+            val_preds = model.forward(x_val, params)
+            val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, scaler)
+            if val_mse < best_val_loss:
+                best_val_loss = val_mse
+                best_params = np.copy(params) #NOTE: Usually final weights are better
+        else:
+            val_mse = val_history[-1] if val_history else train_mse
         train_history.append(train_mse); val_history.append(val_mse)
-        if val_mse < best_val_loss:
-            best_val_loss = val_mse
-            best_params = np.copy(params) #NOTE: Usually final weights are better
-            
-        if len(train_history) % 50 == 0:
-           print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
-            
+
+        log_interval = 100 if use_batching else 50
+        if len(train_history) % log_interval == 0:
+            print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
         return train_mse
+   
 
     start_time = time.time()
     print(f"\n[Training] Starting {args.optimizer.upper()} optimization...")
+    if use_batching:
+        print(f"  > Mode: Mini-Batch (Size: {batch_size})")
+    else:
+        print(f"  > Mode: Full-Batch (Size: {num_train_samples})")
     initial_weights = model.initialize_parameters(args.initialization)
 
     if args.optimizer.upper() == 'COBYLA':
         opt = COBYLA(maxiter=args.maxiter, tol = None)
         res = opt.minimize(fun=objective_function, x0=initial_weights)
     elif args.optimizer.upper() == 'SPSA':
-        opt = SPSA(maxiter=args.maxiter) 
+        opt = SPSA(maxiter=args.maxiter,learning_rate=args.learning_rate, perturbation=args.perturbation) 
         res = opt.minimize(fun=objective_function, x0=initial_weights)
+    else:
+        raise ValueError(f"Optimizer {optimizer_name} not supported.")
     print(f"Training completed in {(time.time() - start_time) / 60:.2f} min.")
+    # Fallback if best_params never updated (rare)
+    if best_params is None: best_params = res.x
 
     return {
         "best_weights": best_params, "best_val_loss": best_val_loss, "final_weights": res.x,             
@@ -960,7 +984,6 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
 # SAVE AND PLOT RESULTS
 # ==============================================================================
 
-
 def save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp):
     
     for folder in ["models", "logs", "figures"]: os.makedirs(folder, exist_ok=True)
@@ -969,9 +992,83 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     num_q_params = len(qnn_dict['weight_params'])
     num_c_params = total_params - num_q_params
 
-    # Save model in pickle file
-    short_args = map_names([args.ansatz, args.entangle], reverse=True)
-    model_filename = f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}.pkl"
+    # ==========================================================================
+    # 1. SMART CONFIG RESOLUTION & MAPPING
+    # ==========================================================================
+    
+    # Defaults (Global Fallback)
+    # We map global args to short names immediately to ensure consistency
+    final_ansatz = map_names([args.ansatz], reverse=True)[0]
+    final_entangle = map_names([args.entangle], reverse=True)[0]
+    final_reps = getattr(args, 'reps', 'N/A')
+    final_encoding = getattr(args, 'encoding', 'N/A')
+    final_map = getattr(args, 'map', 'N/A')
+    final_features = map_names(args.features, reverse=True) 
+
+    # Helper: "If all same -> Single Value. Else -> List String."
+    def resolve_multi_val(values_list):
+        if not values_list: return 'N/A'
+        if all(x == values_list[0] for x in values_list):
+            return values_list[0] 
+        return str(values_list)
+
+    # If Multi-Head, extract real values from heads
+    if getattr(args, 'model', '') == 'multihead' and hasattr(args, 'heads_config') and args.heads_config:
+        list_ansatz = []
+        list_entangle = []
+        list_reps = []
+        list_encoding = []
+        list_map = []
+        list_features = []
+
+        for h in args.heads_config:
+            # 1. Get raw value
+            raw_a = h.get('ansatz', args.ansatz)
+            raw_e = h.get('entangle', args.entangle)
+            
+            # 2. Map to Short Code (effsu2, lin, etc.) IMMEDIATELY
+            # This ensures the list we build contains short friendly names
+            short_a = map_names([raw_a], reverse=True)[0]
+            short_e = map_names([raw_e], reverse=True)[0]
+
+            list_ansatz.append(short_a)
+            list_entangle.append(short_e)
+            
+            # Others don't need mapping
+            list_reps.append(h.get('reps', getattr(args, 'reps', 'N/A')))
+            list_encoding.append(h.get('encoding', getattr(args, 'encoding', 'N/A')))
+            list_map.append(h.get('map', getattr(args, 'map', 'N/A')))
+            
+            f_full = h.get('features', [])
+            list_features.append(map_names(f_full, reverse=True))
+
+        # Resolve to Single or List-String
+        final_ansatz = resolve_multi_val(list_ansatz)
+        final_entangle = resolve_multi_val(list_entangle)
+        final_reps = resolve_multi_val(list_reps)
+        final_encoding = resolve_multi_val(list_encoding)
+        final_map = resolve_multi_val(list_map)
+        final_features = resolve_multi_val(list_features)
+
+    # ==========================================================================
+    # 2. SAVE PICKLE (CLEAN FILENAME)
+    # ==========================================================================
+    
+    # Helper to turn "['a', 'b']" into "a_b" for filenames
+    def clean_filename_str(s):
+        # Remove brackets and quotes
+        s = str(s).replace('[', '').replace(']', '').replace("'", "").replace('"', "")
+        # Replace separator with underscore
+        s = s.replace(', ', '_').replace(',', '_')
+        return s
+
+    safe_ansatz = clean_filename_str(final_ansatz)
+    safe_entangle = clean_filename_str(final_entangle)
+    safe_reps = clean_filename_str(final_reps)
+
+    # Filename is now clean: e.g. ..._effsu2_ugates_...
+    model_filename = os.path.join("models", f"{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{safe_ansatz}_{safe_entangle}_r{safe_reps}.pkl")
+    
     save_payload = {
         "config": vars(args),
         "best_weights": train_results['best_weights'],
@@ -984,57 +1081,48 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     }
     with open(model_filename, "wb") as f: pickle.dump(save_payload, f)
 
-    # Save experiment summary to excel
-    excel_filename = "logs/experiments_summary.xlsx"
+    # ==========================================================================
+    # 3. PREPARE EXCEL DATA
+    # ==========================================================================
+    excel_filename = os.path.join("logs", "experiments_summary.xlsx")
     m_final = final_eval['metrics']
     
-    # Timestamp to date format
     try:
         dt_temp = datetime.datetime.strptime(timestamp, "%m-%d_%H-%M-%S")
         dt_object = dt_temp.replace(year=2026)
     except ValueError:
         dt_object = timestamp 
     
-    ignore_keys = [
-        'select_features', 'drop_features', # Redundant
-        'save_plot', 'show_plot',           # UI flags
-        'initialization'
-    ]
-
-    # Helper: Format values (Bool -> lowercase, List -> string)
+    ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot', 'initialization', 'heads_config', 
+                   'ansatz', 'entangle', 'reps', 'encoding', 'map', 'features']
+    
     def clean_val(v):
         if isinstance(v, bool): return str(v).lower()
         if isinstance(v, list): return str(v)
         return v
-    def normalize_loaded_bools(val):
-        # If pandas loaded it as a real boolean
-        if isinstance(val, bool):
-            return str(val).lower()
-        # If pandas loaded it as a string but it's "VERDADERO" or "TRUE"
-        if isinstance(val, str):
-            if val.upper() in ['TRUE', 'VERDADERO']: return 'true'
-            if val.upper() in ['FALSE', 'FALSO']: return 'false'
-        return val
     
-    # 1. Add args (filtering ignores and formatting)
     raw_data = {}
+
+    # A. Add Standard Args
     for key, value in vars(args).items():
         if key not in ignore_keys:
-            if key in ['features', 'targets']:
-                # Convert full names to short codes before saving
-                short_list = map_names(value, reverse=True)
-                raw_data[key] = clean_val(short_list)
-            else:
-                raw_data[key] = clean_val(value)
+            raw_data[key] = clean_val(value)
 
-    # 2. Add Metrics & Params
+    # B. Add the Resolved Values (We keep the brackets for Excel readability if you want, or clean them too)
+    # Usually, brackets in Excel are fine and helpful. Let's keep them as strings.
+    raw_data['features'] = str(final_features)
+    raw_data['ansatz'] = str(final_ansatz)
+    raw_data['entangle'] = str(final_entangle)
+    raw_data['reps'] = str(final_reps)
+    raw_data['encoding'] = str(final_encoding)
+    raw_data['map'] = str(final_map)
+
+    # C. Add Metrics
     metrics_flat = {
         "step MSE": m_final.get('Step_MSE'),
         "step R2": m_final.get('Step_R2'),
-
         "local MSE": m_final.get('Local_MSE'),
         "local ADE": m_final.get('Local_ADE'),
-
         "global open MSE": m_final.get('Global_open_MSE'),
         "global open R2": m_final.get('Global_open_R2'),
         "global open ADE": m_final.get('Global_open_ADE'),
@@ -1043,7 +1131,6 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         "global closed R2": m_final.get('Global_closed_R2'),
         "global closed ADE": m_final.get('Global_closed_ADE'),
         "global closed FDE": m_final.get('Global_closed_FDE'),
-
         "recursivity": m_final.get('Recursivity'),
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "total params": total_params,
@@ -1051,98 +1138,61 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         "c params": num_c_params,
         "iterations": len(train_results['train_history']),
         "date": dt_object,
-        "model_id": model_filename.split('/')[-1]
+        "model_id": os.path.basename(model_filename)
     }
     raw_data.update(metrics_flat)
 
+    # D. Per-Target Columns
     target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
-    metric_types = [
-        "Step_MSE", "Step_R2",
-        "Local_MSE", "Local_ADE",
-        # Added ADE and FDE here to match your evaluate_model updates
-        "Global_open_MSE", "Global_open_R2", "Global_open_ADE", "Global_open_FDE",
-        "Global_closed_MSE", "Global_closed_R2", "Global_closed_ADE", "Global_closed_FDE"
-    ]
+    metric_types = ["Step_MSE", "Step_R2", "Local_MSE", "Local_ADE", "Global_open_MSE", "Global_open_R2", "Global_open_ADE", "Global_open_FDE", "Global_closed_MSE", "Global_closed_R2", "Global_closed_ADE", "Global_closed_FDE"]
     per_target_cols = []
     
     for tgt in target_names:
         for m_type in metric_types:
-            key_in_dict = f"{tgt}_{m_type}" # e.g. Surge_Velocity_Global_closed_RMSE
-            
+            key_in_dict = f"{tgt}_{m_type}"
             if key_in_dict in m_final:
-                # Clean up name for Excel (Surge Velocity Global closed RMSE)
                 col_name = key_in_dict.replace("_", " ") 
                 raw_data[col_name] = m_final[key_in_dict]
                 per_target_cols.append(col_name)
 
-    column_order = [
-        # 1. ID & Meta
-        "date", "model_id", "run", "testing_fold",
-        
-        # 2. Dataset Info
-        "data", "data_n", "data_dt", 
-        "features", "targets", "window_size", "horizon", 
-        "predict", "norm", "reconstruct_train", "reconstruct_val",
-        
-        # 3. Model Architecture
-        "model", "encoding", "ansatz", "entangle", "reps", "reorder", "initialization",
-        
-        # 4. Complexity
-        "total params", "q params", "c params",
-        
-        # 5. Training Config
-        "optimizer", "maxiter", "tolerance", "iterations", "final val loss",
-        
-        # 7. Key Metrics
-        "step MSE", "step R2",
-        "local MSE", "local ADE",
-        "global open MSE", "global open ADE", "global open FDE", "global open R2", 
-        "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
-    ]
+    # E. Saving
+    column_order = ["date", "model_id", "run", "testing_fold", "data", "features", "targets", "window_size", "horizon", "predict", "model", "encoding", "ansatz", "entangle", "reps", "map", "reorder", "initialization", "total params", "q params", "c params", "optimizer", "maxiter", "tolerance", "iterations", "final val loss", "step MSE", "step R2", "local MSE", "local ADE", "global open MSE", "global open ADE", "global open FDE", "global open R2", "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"]
     final_column_order = column_order + per_target_cols
-    # Construct the final ordered dictionary
-    ordered_row = {}
     
-    # Add ordered keys first
+    ordered_row = {}
     for col in final_column_order:
-        if col in raw_data:
-            ordered_row[col] = raw_data.pop(col) # Remove from raw_data as we add
-            
-    # Add whatever is left (e.g. unknown new args) at the end
-    for k, v in raw_data.items():
-        ordered_row[k] = v
+        if col in raw_data: ordered_row[col] = raw_data.pop(col)
+    for k, v in raw_data.items(): ordered_row[k] = v
     
     df_new = pd.DataFrame([ordered_row])
-    if os.path.exists(excel_filename):
-        try:
+
+    def normalize_loaded_bools(val):
+        if isinstance(val, bool): return str(val).lower()
+        if isinstance(val, str):
+            if val.upper() in ['TRUE', 'VERDADERO']: return 'true'
+            if val.upper() in ['FALSE', 'FALSO']: return 'false'
+        return val
+
+    try:
+        if os.path.exists(excel_filename):
             df_existing = pd.read_excel(excel_filename)
-            df_existing = df_existing.applymap(normalize_loaded_bools)
+            df_existing = df_existing.map(normalize_loaded_bools) 
             df_final = pd.concat([df_existing, df_new], ignore_index=True)
             df_final.to_excel(excel_filename, index=False)
-        except Exception as e:
-            print(f"[Warning] Excel error: {e}. Saving to CSV backup.")
-            df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
-    else:
-        df_new.to_excel(excel_filename, index=False)
+        else:
+            df_new.to_excel(excel_filename, index=False)
+    except PermissionError:
+        print(f"\n{C_RED}[ERROR] Excel file is open! Saving to CSV backup instead.{C_RESET}")
+        df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
+    except Exception as e:
+        print(f"{C_YELLOW}[Warning] Excel error: {e}. Saving to CSV backup.{C_RESET}")
+        df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
 
-    # Text log
+    # Log text
     log_filename = "logs/experiment_log.txt"
-    short_feats = ", ".join(map_names(args.features, reverse=False))
-    encd = getattr(args, 'encoding', 'N/A')
-    ansatz = getattr(args, 'ansatz', 'N/A')
-    ent = getattr(args, 'entangle', 'N/A')
-    reps = getattr(args, 'reps', 'N/A')
-
-    log_entry = (
-        f"[{timestamp}] "
-        f"{args.model:<10} | "
-        f"F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | "
-        f"Circuit: {encd:<10} {ansatz:<15} {ent:<14} reps={reps:<2} | "
-        f"Features: {short_feats} \n"
-    )
+    log_entry = f"[{timestamp}] {args.model:<10} | F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<15} {str(final_entangle):<14} reps={str(final_reps):<2} | Features: {str(final_features)} \n"
+    with open(log_filename, "a") as f: f.write(log_entry)
     
-    with open(log_filename, "a") as f:
-        f.write(log_entry)
     print(f"\n[Logger] Model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
 

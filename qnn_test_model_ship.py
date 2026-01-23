@@ -3,6 +3,7 @@
 
 import argparse
 from utils import *
+from copy import deepcopy
 
 class Args:
     """Helper to convert dict to object for compatibility with utils"""
@@ -35,15 +36,10 @@ def run_test(cli_args):
     x_scaler = saved_data['x_scaler'] # Pre-fitted scaler
     y_scaler = saved_data['y_scaler'] # Pre-fitted scaler
     weights = saved_data['final_weights'] if use_final_weights else saved_data['best_weights']
-    # 3. RECONSTRUCT CIRCUIT FROM SAVED STRUCTURE
-    # No need to call create_multivariate_circuit()!
-    qc = saved_data['qnn_structure']['qc']
-    input_params = saved_data['qnn_structure']['input_params']
-    weight_params = saved_data['qnn_structure']['weight_params']
     
-    print(f"Loaded Config: F={len(args.features)}, W={args.window_size}, H={args.horizon}")
+    print(f"Loaded Config: Model={args.model}, F={len(args.features)}, W={args.window_size}, H={args.horizon}")
 
-    # 4. PREPARE TEST DATA
+    # 3. PREPARE TEST DATA
     # We still need to load the CSV to get the actual test values
     df = pd.read_csv(data_path, index_col=0)
     
@@ -51,6 +47,7 @@ def run_test(cli_args):
     df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
     df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
     df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
+    
     # Reconstruct column lists based on config string
     cols = args.features
     pred_cols = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"] if args.predict == "delta" else ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
@@ -70,24 +67,98 @@ def run_test(cli_args):
     x_test = x_folds[args.testing_fold]
     y_test = y_folds[args.testing_fold]
 
-    # 5. INITIALIZE QNN
-    # Minimal Setup - no circuit logic required
-    backend = AerSimulator(seed_simulator=args.run)
-    estimator = Estimator(options={"run_options": {"shots": None}, "backend_options": {"seed_simulator": args.run}})
-    obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
+    # 4. INITIALIZE & RECONSTRUCT MODEL
     
-    estimator_qnn = EstimatorQNN(
-        circuit=qc, 
-        input_params=input_params, 
-        weight_params=weight_params, 
-        observables=obsvs, 
-        estimator=estimator, 
-        pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=args.run),
-        default_precision=0.0
-    )
+    # --- BRANCH A: MULTI-HEAD RECONSTRUCTION ---
+    if getattr(args, 'model', 'vanilla') == 'multihead':
+        print("[Builder] Reconstructing Multi-Head Model...")
+        if not hasattr(args, 'heads_config') or not args.heads_config:
+            raise ValueError("Model is marked 'multihead' but 'heads_config' is missing in args.")
+
+        models = []
+        input_indices_list = []
         
-    dummy_shape = (y_test.shape[0], args.horizon, y_test.shape[-1]) 
-    model = WindowEncodingQNN(estimator_qnn, dummy_shape, args.run)
+        # We assume the user wants to run on the same seed as training for circuit consistency
+        backend = AerSimulator(seed_simulator=args.run)
+        
+        for i, head_cfg in enumerate(args.heads_config):
+            # 4a. Create Config for this Head
+            head_args = deepcopy(args)
+            for k, v in head_cfg.items():
+                setattr(head_args, k, v)
+
+            # 4b. Rebuild Circuit
+            qc_head, in_p_head, w_p_head = create_multivariate_circuit(head_args)
+            
+            # 4c. Rebuild Estimator
+            estimator = Estimator(options={"run_options": {"shots": None}, "backend_options": {"seed_simulator": args.run}})
+            pass_manager = generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=args.run)
+            
+            # Observables (Z on each qubit)
+            obsvs = [SparsePauliOp('I' * (qc_head.num_qubits - 1 - j) + 'Z' + 'I' * j) for j in range(qc_head.num_qubits)]
+            
+            qnn_head = EstimatorQNN(
+                circuit=qc_head, 
+                input_params=in_p_head, 
+                weight_params=w_p_head, 
+                observables=obsvs, 
+                estimator=estimator, 
+                pass_manager=pass_manager,
+                default_precision=0.0
+            )
+            
+            # 4d. Wrap in WindowEncodingQNN
+            # Calculate output shape: (Batch, Horizon, Head_Output_Dim)
+            h_out_dim = head_cfg['output_dim']
+            dummy_shape = (y_test.shape[0], args.horizon, h_out_dim)
+            
+            model_head = WindowEncodingQNN(qnn_head, dummy_shape, args.run)
+            models.append(model_head)
+            
+            # 4e. Resolve Input Indices for this Head
+            # Convert short codes in head_cfg['features'] to full names, then find index in args.features
+            head_feat_names_full = map_names(head_cfg['features']) # e.g. ['Surge Velocity']
+            
+            # args.features should be the full list of names used in training (e.g. ['Surge Velocity', 'Sway...', ...])
+            # We map the head features to indices in the global input vector
+            indices = []
+            for feat in head_feat_names_full:
+                try:
+                    idx = args.features.index(feat)
+                    indices.append(idx)
+                except ValueError:
+                    raise ValueError(f"Head feature '{feat}' not found in global feature list {args.features}")
+            input_indices_list.append(indices)
+            print(f"  > Head {i+1} Rebuilt: {len(indices)} Inputs -> {h_out_dim} Outputs")
+
+        # 4f. Create the Wrapper
+        model = MultiHeadQNN(models, input_indices_list)
+
+    # --- BRANCH B: VANILLA RECONSTRUCTION (Old Logic) ---
+    else:
+        print("[Builder] Reconstructing Vanilla Model...")
+        # Recover saved structure
+        qc = saved_data['qnn_structure']['qc']
+        input_params = saved_data['qnn_structure']['input_params']
+        weight_params = saved_data['qnn_structure']['weight_params']
+        
+        backend = AerSimulator(seed_simulator=args.run)
+        estimator = Estimator(options={"run_options": {"shots": None}, "backend_options": {"seed_simulator": args.run}})
+        obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
+        
+        estimator_qnn = EstimatorQNN(
+            circuit=qc, 
+            input_params=input_params, 
+            weight_params=weight_params, 
+            observables=obsvs, 
+            estimator=estimator, 
+            pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=args.run),
+            default_precision=0.0
+        )
+            
+        dummy_shape = (y_test.shape[0], args.horizon, y_test.shape[-1]) 
+        model = WindowEncodingQNN(estimator_qnn, dummy_shape, args.run)
+
 
     # 6. EVALUATE & PLOT
     print("Running Evaluation...")
@@ -147,6 +218,7 @@ def run_test(cli_args):
         save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp)
 
     print("Done.")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--version', type=str, choices=['old', 'new','save'],default='old', help="Choose 'old' to run test and generate plots, 'new' to load results, 'save' to save test results")
