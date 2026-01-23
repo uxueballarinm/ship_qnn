@@ -1,6 +1,6 @@
 
 - maxiter: 3000 # --- 1. Reduce Complexity here ---
-  window_size: 4       # Reduced from 5. (Huge speedup: 2^3 vs 2^5 state space)
+  window_size: 3       # Reduced from 5. (Huge speedup: 2^3 vs 2^5 state space)
   select_features:        # Remove redundant features
   - wv                    # Surge
   - sv                    # Sway

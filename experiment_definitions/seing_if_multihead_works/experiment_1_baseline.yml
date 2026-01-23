@@ -1,0 +1,24 @@
+- window_size: 5
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: motion
+  optimizer: cobyla
+  maxiter: 3000
+  save_plot: true
+  heads_config:
+  - features: [wv]
+    output_dim: 1
+    reps: 3
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, -1, -1]
+  - features: [sv, yr, ya, rarad]
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    reorder: false
+    map: [0, 1, 2, 3, -1, -1]

@@ -1,100 +1,104 @@
-import os
 import yaml
+import os
 
-# ==========================================
-# 1. CONFIGURATION
-# ==========================================
-
-OUTPUT_DIR = "experiment_definitions/split_by_first_feature"
-
-# A. FIXED PARAMS:
-# These values are identical for EVERY experiment in EVERY file.
-FIXED_PARAMS = {
-    "maxiter": 5000,                    
-    "optimizer": "cobyla",
-    "encoding": "compact",
-    "model": "vanilla",
-    "predict": "delta",
-    "window_size": 5,
-    "horizon": 5,                    
-    "reconstruct_val": False,         
-    "save_plot": True,
-    "entangle": "reverse_linear",
-    "ansatz": "efficientsu2",
-    "select_features": ["wv", "sv", "yr", "ya", "rarad", "map"],
-    # CRITICAL: Disable shuffling. 
-    # The circuit will process features in the exact order listed below.
-    "reorder": False,
-    "select_features": ["wv", "sv", "yr", "ya", "rarad"]
+# --- 1. Define the Shared Base Configuration ---
+# These settings are common to all experiments
+base_config = {
+    'window_size': 5,
+    'select_features': ['wv', 'sv', 'yr', 'ya', 'rarad'],
+    'model': 'multihead',
+    'predict': 'motion',
+    'optimizer': 'cobyla',
+    'maxiter': 2000,
+    'save_plot': True
 }
 
-# B. SPLIT BY FILE: 
-SPLIT_BY_FILE = {
-    "run": list(range(5))
-}
-
-# C. VARY WITHIN FILE:
-# Logic: Run all seeds for Set 1, then all seeds for Set 2.
-VARY_WITHIN_FILE = {
-    "map": [
-        [0, 1, 2, 4, 3, -1],  # Order 1: Kinematic
-        [4, 2, 1, 0, 3, -1],  # Order 2: Steering
-        [3, 0, 1, 2, 4, -1]   # Order 3: State-Space
-    ]
-}
-
-OUTPUT_DIR = "experiment_definitions/fixed_orders_no_radeg"
-
-# ==========================================
-# 2. GENERATOR LOGIC
-# ==========================================
-
-def generate_yaml_files():
+# --- 2. Helper Function to Build Heads ---
+def create_heads(ansatz_type, head2_map_strategy):
+    """
+    Creates the heads_config list based on ansatz and mapping strategy.
     
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    print(f"Generating YAML files in '{OUTPUT_DIR}'...\n")
-
-    # Group maps by their first element (index 0)
-    # The keys will be: -1, 0, 1, 2, 3, 4
-    grouped_maps = {}
-
-    for map_config in ALL_MAPS:
-        first_val = map_config[0]
-        if first_val not in grouped_maps:
-            grouped_maps[first_val] = []
-        grouped_maps[first_val].append(map_config)
-
-    count = 0
+    Head 1 (Surge) is kept constant.
+    Head 2 (Turner) varies based on the map.
+    """
     
-    # Iterate over the groups (sorted just for tidy filenames)
-    for first_val in sorted(grouped_maps.keys()):
+    # Head 1: Surge (1 Feature: 'wv')
+    # 1 Feature -> 1 U-Gate -> 3 Slots. 
+    # Standard Map: [0, -1, -1]
+    head1 = {
+        'features': ['wv'],
+        'output_dim': 1,
+        'reps': 3,
+        'encoding': 'compact',
+        'ansatz': ansatz_type,
+        'entangle': 'reverse_linear',
+        'reorder': False,
+        'map': [0, -1, -1]
+    }
+
+    # Head 2: Turner (4 Features: 'sv', 'yr', 'ya', 'rarad')
+    # 4 Features -> 2 U-Gates -> 6 Slots.
+    # Indices relative to this head: 0=sv, 1=yr, 2=ya, 3=rarad
+    
+    if head2_map_strategy == "standard":
+        # Order: [sv, yr, ya, rarad, pad, pad]
+        h2_map = [0, 1, 2, 3, -1, -1]
         
-        # Define filename: e.g. "map_start_0.yml", "map_start_minus1.yml"
-        # We replace -1 with 'neg1' or just keep it as is. 
-        # Using string replacement for clarity if desired.
-        val_str = str(first_val).replace("-1", "neg1")
-        filename = f"map_start_{val_str}.yml"
-        filepath = os.path.join(OUTPUT_DIR, filename)
-
-        experiment_list = []
+    elif head2_map_strategy == "rudder_first":
+        # Order: [rarad, sv, yr, ya, pad, pad]
+        # Puts Rudder (3) in the very first rotation slot
+        h2_map = [3, 0, 1, 2, -1, -1]
         
-        # For every map in this group, create an experiment entry
-        for specific_map in grouped_maps[first_val]:
-            
-            # Combine Fixed params + the specific map
-            full_entry = {**FIXED_PARAMS}
-            full_entry["map"] = specific_map
-            
-            experiment_list.append(full_entry)
+    elif head2_map_strategy == "rudder_last":
+        # Order: [sv, yr, ya, pad, pad, rarad]
+        # Puts Rudder (3) in the very last rotation slot
+        h2_map = [0, 1, 2, -1, -1, 3]
 
-        # Write to YAML
-        with open(filepath, "w") as f:
-            yaml.dump(experiment_list, f, default_flow_style=None, sort_keys=False)
+    head2 = {
+        'features': ['sv', 'yr', 'ya', 'rarad'],
+        'output_dim': 3,
+        'reps': 2,
+        'encoding': 'compact',
+        'ansatz': ansatz_type,
+        'entangle': 'reverse_linear',
+        'reorder': False,
+        'map': h2_map
+    }
+    
+    return [head1, head2]
 
-        print(f" -> Created: {filename} ({len(experiment_list)} experiments)")
-        count += 1
+# --- 3. Define the 3 Experiments ---
 
-    print(f"\nDone! Generated {count} files containing {len(ALL_MAPS)} total experiments.")
+experiments = []
 
-if __name__ == "__main__":
-    generate_yaml_files()
+# Experiment 1: Baseline (EfficientSU2 + Standard Map)
+exp1 = base_config.copy()
+exp1['heads_config'] = create_heads(ansatz_type='efficientsu2', head2_map_strategy='standard')
+experiments.append(("experiment_1_baseline.yml", exp1))
+
+# Experiment 2: Map Importance Test (EfficientSU2 + Rudder First)
+# Comparing Exp 1 vs Exp 2 tells you if Map Order matters.
+exp2 = base_config.copy()
+exp2['heads_config'] = create_heads(ansatz_type='efficientsu2', head2_map_strategy='rudder_first')
+experiments.append(("experiment_2_map_variation.yml", exp2))
+
+# Experiment 3: Ansatz Test (UGates + Standard Map)
+# Comparing Exp 1 vs Exp 3 tells you if UGates is better than EfficientSU2.
+exp3 = base_config.copy()
+exp3['heads_config'] = create_heads(ansatz_type='ugates', head2_map_strategy='standard')
+experiments.append(("experiment_3_ugates.yml", exp3))
+
+# --- 4. Write Files ---
+print("Generating configuration files...")
+
+for filename, config in experiments:
+    with open(filename, 'w') as f:
+        # We wrap the config in a list because your main script 
+        # expects a list of experiments (even if there is only 1)
+        yaml.dump([config], f, default_flow_style=None, sort_keys=False)
+    print(f" -> Created {filename}")
+
+print("\nDone! You can now run these in separate terminals:")
+print("python qnn_run_experiments_ship.py experiment_1_baseline.yml")
+print("python qnn_run_experiments_ship.py experiment_2_map_variation.yml")
+print("python qnn_run_experiments_ship.py experiment_3_ugates.yml")

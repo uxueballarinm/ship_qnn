@@ -84,27 +84,107 @@ def run(args):
     x_train_val = np.concatenate([x_data_folds[i] for i in train_val_fold_indices], axis=0)
     y_train_val = np.concatenate([y_data_folds[i] for i in train_val_fold_indices], axis=0)
     x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, test_size=val_size, shuffle=False, random_state=seed)
-
     # Construct QNN
-    qc,input_params, weight_params = create_multivariate_circuit(args)
-    backend = AerSimulator(seed_simulator=seed)
-    estimator_options = {"run_options": {"shots": None, "seed": seed}, "backend_options": {"seed_simulator": seed}}
-    estimator = Estimator(options=estimator_options)
-    obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
-    estimator_qnn = EstimatorQNN(
-        circuit=qc, 
-        input_params=input_params, 
-        weight_params=weight_params, 
-        observables=obsvs, 
-        estimator=estimator, 
-        input_gradients=False,  
-        pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed), #TODO: Change optimization level?
-        default_precision=0.0
-    )
+    if args.model == 'multihead':
+        if not hasattr(args, 'heads_config') or not args.heads_config:
+            raise ValueError("Model is 'multihead' but no 'heads_config' found in arguments/YAML.")
 
-    # Instantiate model
-    model = WindowEncodingQNN(estimator_qnn, y_train.shape, seed)
-    
+        models_list = []
+        input_indices_list = []
+        combined_params = {'input_params': [], 'weight_params': [], 'qc': None}
+        
+        print(f"\n[Builder] Constructing Dynamic Multi-Head QNN ({len(args.heads_config)} heads)...")
+        
+        # 2. Iterate through the configuration list
+        for i, head_cfg in enumerate(args.heads_config):
+            
+            # --- A. Resolve Input Indices ---
+            # We look for the feature names in the global 'args.select_features' list
+           # --- A. Resolve Input Indices ---
+            # We look for the feature names in the global 'args.select_features' list
+            head_feature_names = map_names(head_cfg.get('features', []))
+            current_head_indices = []
+            
+            for feat in head_feature_names:
+                # Find index of this feature in the actual dataset columns we selected
+                # We use string matching. 
+                try:
+                    # Note: args.features usually holds the full names or codes depending on your map_names logic
+                    # We try to match exactly what is in args.features
+                    idx = args.features.index(feat)
+                    current_head_indices.append(idx)
+                except ValueError:
+                    raise ValueError(f"Head {i+1} Config Error: Feature '{feat}' not found in global select_features: {args.features}")
+            
+            input_indices_list.append(current_head_indices)
+            
+            # --- B. Create Head-Specific Args ---
+            head_args = deepcopy(args)
+            head_args.map = None
+            # Override global args with head-specific ones (reps, encoding, etc.)
+            for key, val in head_cfg.items():
+                if key not in ['features', 'outputs']: # Skip non-arg keys
+                    setattr(head_args, key, val)
+            
+            # Important: Set the 'features' attribute for the circuit builder to match this head's inputs
+            # The circuit builder uses len(args.features) to determine qubit count
+            head_args.features = head_feature_names 
+            
+            # --- C. Build Circuit ---
+            qc, in_p, w_p = create_multivariate_circuit(head_args)
+            backend = AerSimulator(seed_simulator=seed)
+            estimator_options = {"run_options": {"shots": None, "seed": seed}, "backend_options": {"seed_simulator": seed}}
+            estimator = Estimator(options=estimator_options)
+            obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
+            estimator_qnn = EstimatorQNN(
+                circuit=qc, 
+                input_params=in_p, 
+                weight_params=w_p, 
+                observables=obsvs, 
+                estimator=estimator, 
+                input_gradients=False,  
+                pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed), #TODO: Change optimization level?
+                default_precision=0.0
+            )
+            
+            # --- D. Determine Output Size ---
+            # The head output size = number of targets assigned to this head.
+            # You can explicitly pass 'output_dim' in config, or we infer it.
+            # Assuming 'outputs' key in config lists the target names for logging/verification
+            num_outputs = head_cfg.get('output_dim', 1) 
+            
+            # Create Wrapper
+            head_model = WindowEncodingQNN(estimator_qnn, (0, args.horizon, num_outputs), seed=args.run)
+            models_list.append(head_model)
+            
+            # Store structure info (for saving)
+            combined_params['input_params'].extend(list(in_p))
+            combined_params['weight_params'].extend(list(w_p))
+            print(f"  > Built Head {i+1}: Input {head_feature_names} -> {num_outputs} Outputs | Reps={head_args.reps}, Enc={head_args.encoding}")
+
+        # --- E. Combine ---
+        model = MultiHeadQNN(models_list, input_indices_list)
+        qnn_dict = combined_params
+    elif args.model == 'vanilla':
+        qc, input_params, weight_params = create_multivariate_circuit(args)
+        backend = AerSimulator(seed_simulator=seed)
+        estimator_options = {"run_options": {"shots": None, "seed": seed}, "backend_options": {"seed_simulator": seed}}
+        estimator = Estimator(options=estimator_options)
+        obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
+        estimator_qnn = EstimatorQNN(
+            circuit=qc, 
+            input_params=input_params, 
+            weight_params=weight_params, 
+            observables=obsvs, 
+            estimator=estimator, 
+            input_gradients=False,  
+            pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed), #TODO: Change optimization level?
+            default_precision=0.0
+        )
+
+        # Instantiate model
+        model = WindowEncodingQNN(estimator_qnn, y_train.shape, seed)
+        qnn_dict = {'input_params': input_params, 'weight_params': weight_params, 'qc': qc}
     # Training
     results = train_model(args, model, x_train, y_train, x_val, y_val, y_scaler)
 
@@ -139,7 +219,6 @@ def run(args):
     plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
     
     scalers = [x_scaler, y_scaler]
-    qnn_dict = {"qc": qc, "input_params": input_params, "weight_params": weight_params}
     save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
     load_experiment_results(f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}.pkl")
 
@@ -150,7 +229,7 @@ if __name__=="__main__":
     # Data structure
     parser.add_argument('--data', type=str, default="datasets\zigzag_11_11_ind_reduced_2_s.csv") #TODO: Try full dataset
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-select', '--select_features', type=str, default=['dwv','dsvdyr','dya','rarad'], nargs='+', help="Explicitly select features (e.g. --select_features wv sv yr ya)")
+    group.add_argument('-select', '--select_features', type=str, default=['wv','sv', 'yr','ya','rarad'], nargs='+', help="Explicitly select features (e.g. --select_features wv sv yr ya)")
     group.add_argument('-drop', '--drop_features', type=str, nargs='+', help="Drop features from default set (e.g. --drop_features rarad)")
     parser.add_argument('-ws', '--window_size', type=int, default=5, help="Window size = num qubits")
     parser.add_argument('-y', '--horizon', type=int, default=5) # 1,3,5
@@ -171,8 +250,8 @@ if __name__=="__main__":
     parser.add_argument('--ansatz', type=str, default='ugates', choices=['ugates', 'efficientsu2', 'realamplitudes']) # ugates
     parser.add_argument('--reps', type=int, default=3) # 1,3,5,7
     parser.add_argument('-init', '--initialization', type=str, default='uniform', choices=['uniform', 'identity'])# uniform
-    parser.add_argument('--model', type=str, default='vanilla', choices=['vanilla', 'hybrid']) # vanilla
-
+    parser.add_argument('--model', type=str, default='vanilla', choices=['vanilla', 'multihead']) # vanilla
+    parser.add_argument('--heads_config', default=None, help="Config for multi-head model (loaded via YAML)")
     # Optimization
     parser.add_argument('-opt','--optimizer', type=str, default='cobyla', choices=['cobyla', 'spsa']) # cobyla
     parser.add_argument('--maxiter', type=int, default=10000)

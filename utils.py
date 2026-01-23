@@ -1,6 +1,7 @@
 import os
 import pickle
 import argparse
+from copy import deepcopy
 
 import time
 import datetime
@@ -408,9 +409,56 @@ class ClassicalWrapper:
         
         return out.cpu().numpy().reshape(x.shape[0], horizon, self.num_targets)
 
+# Add/Replace in utils.py
 
-# TRAIN AND EVALUATE MODEL
-# ------------------------------------------------------------------------------------------------------------------------------------------------
+class MultiHeadQNN:
+    """
+    A Generic Multi-Head QNN Wrapper.
+    - Manages N independent models (heads).
+    - Splits the flat parameter vector into chunks for each head.
+    - Splits the input tensor 'x' based on feature indices for each head.
+    - Concatenates the outputs of all heads into one final tensor.
+    """
+    def __init__(self, models_list, input_indices_list):
+        self.models = models_list
+        self.input_groups = input_indices_list
+        
+        # Calculate parameter boundaries
+        self.param_splits = []
+        total = 0
+        for m in self.models:
+            self.param_splits.append(m.total_params)
+            total += m.total_params
+        self.total_params = total
+        
+        print(f"\n[MultiHead] Initialized with {len(self.models)} heads.")
+        for i, (n_p, grp) in enumerate(zip(self.param_splits, self.input_groups)):
+            print(f"  > Head {i+1}: {n_p} params | Input Indices: {grp}")
+
+    def forward(self, x, params):
+        outputs = []
+        param_start = 0
+        
+        # Iterate over each head
+        for model, input_idx, n_params in zip(self.models, self.input_groups, self.param_splits):
+            # 1. Slice Parameters for this head
+            p_head = params[param_start : param_start + n_params]
+            param_start += n_params
+            
+            # 2. Slice Inputs (Batch, Window, Selected_Features)
+            x_head = x[:, :, input_idx]
+            
+            # 3. Forward Pass
+            outputs.append(model.forward(x_head, p_head))
+            
+        # 4. Concatenate all outputs along the feature dimension (last axis)
+        return np.concatenate(outputs, axis=2)
+
+    def initialize_parameters(self, strategy):
+        # Initialize each head and concatenate
+        params_list = [m.initialize_parameters(strategy) for m in self.models]
+        return np.concatenate(params_list)
+
 
 def _compute_loss(args, pred, target, reconstruct, scaler=None):
     num_targets = target.shape[-1]

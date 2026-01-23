@@ -30,6 +30,7 @@ DEFAULTS = {
     'reps': 3,
     'initialization': 'uniform',
     'model': 'vanilla',
+    'heads_config': None,
     'optimizer': 'cobyla',
     'maxiter': 10000,
     'tolerance': None,
