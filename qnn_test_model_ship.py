@@ -215,7 +215,7 @@ def run_test(cli_args):
         qnn_dict = saved_data['qnn_structure']
         
         # Call the utility function
-        save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp)
+        _ = save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp)
 
     print("Done.")
 

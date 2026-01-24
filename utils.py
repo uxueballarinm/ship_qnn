@@ -1086,8 +1086,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     raw_data = {}
     
     # A. Add Args
-    ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot', 'initialization', 'heads_config', 
-                   'ansatz', 'entangle', 'reps', 'encoding', 'map', 'features']
+    ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot', 'initialization', 'heads_config', 'ansatz', 'entangle', 'reps', 'encoding', 'map', 'features']
     
     def clean_val(v):
         if isinstance(v, bool): return str(v).lower()
