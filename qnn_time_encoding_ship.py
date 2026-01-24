@@ -219,7 +219,7 @@ def run(args):
     plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
     
     scalers = [x_scaler, y_scaler]
-    save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
+    model_dir = save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
     load_experiment_results(f"models/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}.pkl")
 
 if __name__=="__main__":

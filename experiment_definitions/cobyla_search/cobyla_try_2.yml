@@ -1,0 +1,59 @@
+# # Best Empirical Setup based on your logs
+# - window_size: 5
+#   select_features: ['wv', 'sv', 'yr', 'rarad'] # REMOVED 'ya' from input
+#   model: multihead
+#   predict: motion         # <--- SWITCHED BACK TO MOTION per your results
+#   optimizer: cobyla
+#   maxiter: 4000
+#   initialization: identity
+
+#   heads_config:
+#     # Head 1: Surge (Input: Surge, Sway, Rudder)
+#     - features: ['wv', 'sv', 'rarad']
+#       output_dim: 1
+#       reps: 3
+#       encoding: compact
+#       ansatz: efficientsu2
+#       entangle: reverse_linear
+#       map: [0, 1, 2]
+
+#     # Head 2: Turning (Input: Sway, YawRate, Rudder)
+#     # Predicting: Sway(sv), YawRate(yr), YawAngle(ya)
+#     - features: ['sv', 'yr', 'rarad']
+#       output_dim: 3 
+#       reps: 2
+#       encoding: compact
+#       ansatz: efficientsu2
+#       entangle: reverse_linear
+#       map: [0, 1, 2]
+
+# Best Empirical Setup based on your logs
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'rarad'] # REMOVED 'ya' from input
+  model: multihead
+  predict: delta         # <--- SWITCHED BACK TO MOTION per your results
+  optimizer: cobyla
+  maxiter: 4000
+  initialization: identity
+  ansatz: efficientsu2
+  entangle: reverse_linear
+  heads_config:
+    # Head 1: Surge (Input: Surge, Sway, Rudder)
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: reverse_linear
+      map: [0, 1, 2]
+
+    # Head 2: Turning (Input: Sway, YawRate, Rudder)
+    # Predicting: Sway(sv), YawRate(yr), YawAngle(ya)
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 3 
+      reps: 2
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: reverse_linear
+      map: [0, 1, 2]
+  

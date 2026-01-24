@@ -1,57 +1,64 @@
-# Best Empirical Setup based on your logs
+# # -------------------------------------------------------------------------
+# # EXPERIMENT 1: The "Golden" Run (Fixed Filename Issue)
+# # -------------------------------------------------------------------------
+# - window_size: 5
+#   select_features: ['wv', 'sv', 'yr', 'rarad']
+#   model: multihead
+#   predict: motion
+#   optimizer: cobyla
+#   maxiter: 4000
+#   initialization: identity
+#   save_plot: true
+  
+#   # --- ADD THESE GLOBAL ARGS TO FIX THE CRASH ---
+#   ansatz: efficientsu2   # Matches the heads
+#   entangle: full         # Matches the heads
+#   # ----------------------------------------------
+
+#   heads_config:
+#   - features: ['wv', 'sv', 'rarad']
+#     output_dim: 1
+#     reps: 3
+#     encoding: compact
+#     ansatz: efficientsu2
+#     entangle: full
+#     map: [0, 1, 2]
+#   - features: ['sv', 'yr', 'rarad']
+#     output_dim: 3
+#     reps: 2
+#     encoding: compact
+#     ansatz: efficientsu2
+#     entangle: full
+#     map: [0, 1, 2]
+
+# -------------------------------------------------------------------------
+# EXPERIMENT 2: Delta Prediction (Fixed Typo)
+# -------------------------------------------------------------------------
 - window_size: 5
-  select_features: ['wv', 'sv', 'yr', 'rarad'] # REMOVED 'ya' from input
+  select_features: ['wv', 'sv', 'yr', 'rarad']
   model: multihead
-  predict: motion         # <--- SWITCHED BACK TO MOTION per your results
+  predict: delta        # <--- FIXED (was 'deltas')
   optimizer: cobyla
   maxiter: 4000
   initialization: identity
+  
+  # --- GLOBALS ---
+  ansatz: efficientsu2
+  entangle: full
+  # ---------------
 
   heads_config:
-    # Head 1: Surge (Input: Surge, Sway, Rudder)
-    - features: ['wv', 'sv', 'rarad']
-      output_dim: 1
-      reps: 3
-      encoding: compact
-      ansatz: efficientsu2
-      entangle: full
-      map: [0, 1, 2]
-
-    # Head 2: Turning (Input: Sway, YawRate, Rudder)
-    # Predicting: Sway(sv), YawRate(yr), YawAngle(ya)
-    - features: ['sv', 'yr', 'rarad']
-      output_dim: 3 
-      reps: 2
-      encoding: compact
-      ansatz: efficientsu2
-      entangle: full
-      map: [0, 1, 2]
-
-# Best Empirical Setup based on your logs
-- window_size: 5
-  select_features: ['wv', 'sv', 'yr', 'rarad'] # REMOVED 'ya' from input
-  model: multihead
-  predict: deltas         # <--- SWITCHED BACK TO MOTION per your results
-  optimizer: cobyla
-  maxiter: 4000
-  initialization: identity
-
-  heads_config:
-    # Head 1: Surge (Input: Surge, Sway, Rudder)
-    - features: ['wv', 'sv', 'rarad']
-      output_dim: 1
-      reps: 3
-      encoding: compact
-      ansatz: efficientsu2
-      entangle: full
-      map: [0, 1, 2]
-
-    # Head 2: Turning (Input: Sway, YawRate, Rudder)
-    # Predicting: Sway(sv), YawRate(yr), YawAngle(ya)
-    - features: ['sv', 'yr', 'rarad']
-      output_dim: 3 
-      reps: 2
-      encoding: compact
-      ansatz: efficientsu2
-      entangle: full
-      map: [0, 1, 2]
+  - features: ['wv', 'sv', 'rarad']
+    output_dim: 1
+    reps: 3
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: full
+    map: [0, 1, 2]
+  - features: ['sv', 'yr', 'rarad']
+    output_dim: 3
+    reps: 2
+    encoding: compact
+    ansatz: efficientsu2
+    entangle: full
+    map: [0, 1, 2]

@@ -1,0 +1,94 @@
+# # -------------------------------------------------------------------------
+# # REPEATING RUN: 01-20_21-40-19 (But with Multihead)
+# # Original Stats: Step R2 (Surge=0.65, Sway=0.93, YawRate=0.94)
+# # Goal: Maintain high turning accuracy, improve Surge via isolation.
+# # -------------------------------------------------------------------------
+
+# - window_size: 5
+#   select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+
+#   # --- KEY SETTINGS FROM LOG ---
+#   model: multihead         # <--- CHANGED from 'vanilla'
+#   predict: motion          # As per log
+#   optimizer: cobyla        # As per log (Proven to work well here)
+#   maxiter: 5000            # As per log
+#   save_plot: true
+#   heads_config:
+#     # ---------------------------------------------------------
+#     # HEAD 1: SURGE (The harder variable)
+#     # Inputs: Surge, Sway, Rudder (Physical causes of drag)
+#     # ---------------------------------------------------------
+#     - features: ['wv', 'sv', 'rarad']
+#       output_dim: 1        # Predicts: wv
+#       reps: 3              # As per log
+#       encoding: compact
+#       ansatz: efficientsu2 # As per log
+#       entangle: reverse_linear # As per log
+#       # Map: 3 features fit perfectly in 1 U-gate (3 slots)
+#       map: [0, 1, 2, 0, 1, 2, 0, 1, 2]       
+
+#     # ---------------------------------------------------------
+#     # HEAD 2: TURNING (The strong variable)
+#     # Inputs: Sway, YawRate, YawAngle, Rudder
+#     # ---------------------------------------------------------
+#     - features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+#       output_dim: 3        # Predicts: sv, yr, ya
+#       reps: 3              # As per log
+#       encoding: compact
+#       ansatz: efficientsu2 # As per log
+#       entangle: reverse_linear # As per log
+#       # Map: 4 features require 2 U-gates (6 slots). 
+#       # Slots 0-3 filled, 4-5 padded (-1).
+#       map: [0, 1, 2, 3, 4, -1, 0, 1, 2, 3, 4, -1, 0, 1, 2, 3, 4, -1]
+#   entangle: reverse_linear
+#   ansatz: efficientsu2
+# -------------------------------------------------------------------------
+# REPEATING RUN: 01-20_18-11-49 (Vanilla Motion)
+# Original Stats: Step R2 (Surge=0.40, Sway=0.83, YawRate=0.78, YawAngle=0.96)
+# Configuration: Single Head, Shallow Circuit (Reps=1), Motion Prediction
+# -------------------------------------------------------------------------
+# -------------------------------------------------------------------------
+# REPEATING RUN: 01-20_21-40-19 (Adapted to Multi-Head)
+# Original Stats: Step R2 (Surge=0.65, Sway=0.93, YawRate=0.94)
+# Strategy: Keep physics settings (Motion, Cobyla, Reps=3) but isolate Surge.
+# -------------------------------------------------------------------------
+
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+
+  # --- PRESERVED SETTINGS (From your successful log) ---
+  model: multihead         # <--- The requested change
+  predict: motion          # KEEP THIS (It worked much better than Delta)
+  optimizer: cobyla        # KEEP THIS (SPSA was unstable)
+  maxiter: 5000            # Giving it enough time
+  save_plot: true
+  heads_config:
+    # ---------------------------------------------------------
+    # HEAD 1: SURGE (Isolated)
+    # Goal: Focus purely on speed without turning noise.
+    # Input: Surge(wv), Sway(sv), Rudder(rarad)
+    # ---------------------------------------------------------
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1        # Predicts: wv
+      reps: 3              # Matches your successful run
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: reverse_linear
+      # 3 Features fit exactly into 1 U-Gate (3 slots)
+      map: [0, 1, 2, 0, 1, 2, 0, 1, 2]       
+
+    # ---------------------------------------------------------
+    # HEAD 2: TURNING (Coupled)
+    # Goal: Keep Sway, Yaw, and Angle together (Physics requires this).
+    # Input: Sway(sv), YawRate(yr), YawAngle(ya), Rudder(rarad)
+    # ---------------------------------------------------------
+    - features: ['wv','sv', 'yr', 'ya', 'rarad']
+      output_dim: 3        # Predicts: sv, yr, ya
+      reps: 3              # Matches your successful run
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: reverse_linear
+      # 4 Features need 2 U-Gates (6 slots). We pad the last 2 with -1.
+      map: [0, 1, 2, 3, 4, -1, 0, 1, 2, 3, 4, -1, 0, 1, 2, 3, 4, -1]
+  entangle: reverse_linear
+  ansatz: efficientsu2
