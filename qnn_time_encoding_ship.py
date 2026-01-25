@@ -220,7 +220,7 @@ def run(args):
     
     scalers = [x_scaler, y_scaler]
     model_dir = save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
-    load_experiment_results(f"models/"+model_dir)
+    load_experiment_results(model_dir)
 
 if __name__=="__main__":
 
