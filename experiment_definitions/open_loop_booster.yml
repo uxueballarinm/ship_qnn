@@ -1,0 +1,38 @@
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad'] # YA is INCLUDED
+  model: multihead
+  predict: motion       
+  optimizer: cobyla
+  maxiter: 5000
+  initialization: identity
+
+  heads_config:
+    # HEAD 1: SURGE (Speed)
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1  # Predicts wv
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+
+    # HEAD 2: MANEUVERING (Turning Rate)
+    # Focused purely on dynamics (Forces), not position
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2  # Predicts sv, yr
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+
+    # HEAD 3: ORIENTATION (Angle)
+    # Focused purely on Kinematics (Integration)
+    # Input: Angle (current state) + YawRate (change rate)
+    - features: ['ya', 'yr'] 
+      output_dim: 1  # Predicts ya
+      reps: 1        # Shallow circuit (Identity + simple addition is easy)
+      encoding: compact
+      ansatz: realamplitudes # Simpler ansatz for simple math
+      entangle: full
+      map: [0, 1, -1]

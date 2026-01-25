@@ -1,29 +1,29 @@
 # EXPERIMENT: Asymmetric Complexity
-window_size: 5
-select_features: ['wv', 'sv', 'yr', 'rarad']
-model: multihead
-predict: motion
-optimizer: cobyla
-maxiter: 4000
-initialization: identity
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'rarad']
+  model: multihead
+  predict: motion
+  optimizer: cobyla
+  maxiter: 4000
+  initialization: identity
 
-heads_config:
-  # HEAD 1: SURGE (The Dumb Head)
-  # Reduced reps to 1 to force it to learn simple linear drag
-  - features: ['wv', 'sv', 'rarad']
-    output_dim: 1
-    reps: 1              # <--- CHANGE: Very shallow
-    encoding: compact
-    ansatz: efficientsu2
-    entangle: full
-    map: [0, 1, 2]
+  heads_config:
+    # HEAD 1: SURGE (The Dumb Head)
+    # Reduced reps to 1 to force it to learn simple linear drag
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 1              # <--- CHANGE: Very shallow
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
 
-  # HEAD 2: TURNING (The Smart Head)
-  # Kept deep because turning is complex
-  - features: ['sv', 'yr', 'rarad']
-    output_dim: 3
-    reps: 3              # <--- CHANGE: Deep
-    encoding: compact
-    ansatz: efficientsu2
-    entangle: full
-    map: [0, 1, 2]
+    # HEAD 2: TURNING (The Smart Head)
+    # Kept deep because turning is complex
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 3
+      reps: 3              # <--- CHANGE: Deep
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]

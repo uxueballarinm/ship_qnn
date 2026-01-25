@@ -1,0 +1,27 @@
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: delta        # Keeping Delta because it gave you 0.96 Sway R2
+  optimizer: cobyla
+  maxiter: 5000
+  initialization: identity
+
+  heads_config:
+    # HEAD 1: SURGE
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+
+    # HEAD 2: TURNING
+    # We give it 'ya' as input to help stabilize the delta prediction
+    - features: ['sv', 'yr', 'ya', 'rarad']
+      output_dim: 3
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2, 3, -1, -1]
