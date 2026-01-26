@@ -18,7 +18,7 @@ DEFAULTS = {
     'window_size': 5,
     'horizon': 5,          
     'testing_fold': 3,
-    'predict': 'delta',
+    'predict': 'motion',
     'norm': True,
     'reconstruct_train': False,
     'reconstruct_val': False, 
@@ -86,16 +86,24 @@ def main():
             else:
                 print(f"[Warning] Key '{key}' not found in defaults. It will be added but might be ignored by your code.")
                 current_args_dict[key] = value
+        seeds = current_args_dict.get('run', 0)
+        if not isinstance(seeds, list):
+            seeds = [seeds]
+        for seed_val in seeds:
+            print(f"\n  >>> STARTING RUN (Seed {seed_val}) ...")
+            
+            # Create a specific args object for this seed
+            current_run_args = deepcopy(current_args_dict)
+            current_run_args['run'] = int(seed_val) # Ensure it's an int
+            
+            args_obj = ExperimentArgs(**current_run_args)
 
-        # 3. Convert to object (Namespace)
-        args_obj = ExperimentArgs(**current_args_dict)
-
-        # 4. Run your existing function
-        try:
-            run(args_obj)
-        except Exception as e:
-            print(f"!!! Experiment {i+1} Failed !!!")
-            print(e)
+            try:
+                run(args_obj)
+                print(f"  >>> COMPLETED RUN (Seed {seed_val})")
+            except Exception as e:
+                print(f"!!! Experiment {i+1} (Seed {seed_val}) Failed !!!")
+                print(e)
 
 if __name__ == "__main__":
     main()

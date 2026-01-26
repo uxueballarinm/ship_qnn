@@ -649,7 +649,7 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     # 1. Setup
     num_samples = x_test.shape[0]; horizon = args.horizon        
     num_targets = len(args.targets)
-
+    state_vars = ['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']
     direct_updates = []
     physics_updates = []
     update_rules = {} 
@@ -687,8 +687,14 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
             update_rules[t_idx].append((f_idx_sec, mode))
     driven_feats = set()
     for rules in update_rules.values():
-        for f_idx, _ in rules:
-            driven_feats.add(f_idx)
+        for f_idx, _ in rules: driven_feats.add(f_idx)
+    leakage_warning = False
+    for state in state_vars:
+        if state in args.features:
+            s_idx = args.features.index(state)
+            if s_idx not in driven_feats:
+                print(f"{C_YELLOW}[WARNING] State Variable '{state}' is in INPUT but not updated by OUTPUT. Using Zero-Order Hold (Not GT) to prevent leakage.{C_RESET}")
+                leakage_warning = True
     num_driven = len(update_rules)
     feat_names = args.features
     recursive_ratio = num_driven / len(feat_names)
@@ -716,23 +722,24 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
 
         next_gt_idx = min(i + 1, num_samples - 1)
         next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] 
-        
-        # Start with Ground Truth
-        next_input_real = x_scaler.inverse_transform(next_gt_features_norm)
-        
+        next_input_real = last_feat_real.copy()
+        next_gt_real = x_scaler.inverse_transform(next_gt_features_norm)
+
+        for f_idx, f_name in enumerate(args.features):
+             if "Rudder" in f_name or "Action" in f_name:
+                next_input_real[0, f_idx] = next_gt_real[0, f_idx]
+
         pred_step_norm = preds_full[:, 0, :]
         if y_scaler: pred_step_real = y_scaler.inverse_transform(pred_step_norm)
         else: pred_step_real = pred_step_norm
-
+        
         # Apply Updates
         for t_idx, updates in update_rules.items():
             pred_val = pred_step_real[0, t_idx]
-            
             for f_idx, mode in updates:
                 if mode == "DIRECT":
                     next_input_real[0, f_idx] = pred_val
                 elif mode == "INTEGRATE":
-                    # New Pos = Old Pos + Pred Delta
                     old_val = last_feat_real[0, f_idx]
                     next_input_real[0, f_idx] = old_val + pred_val
                 elif mode == "DIFF":
@@ -748,109 +755,6 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
 
     return recursive_preds, recursive_ratio
-
-# def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler):
-    
-#     num_samples = x_test.shape[0]; horizon = args.horizon
-#     feat_names = args.features 
-#     def get_idx(name): return feat_names.index(name) if name in feat_names else None
-#     idx_wv, idx_sv, idx_yr, idx_ya = get_idx('Surge Velocity'), get_idx('Sway Velocity'), get_idx('Yaw Rate'), get_idx('Yaw Angle')
-#     idx_dwv, idx_dsv, idx_dyr, idx_dya = get_idx('delta Surge Velocity'), get_idx('delta Sway Velocity'), get_idx('delta Yaw Rate'), get_idx('delta Yaw Angle')
-
-#     if args.predict == 'motion' and (idx_wv is None or idx_sv is None or idx_yr is None or idx_ya is None):
-#         print(f"  > {C_YELLOW}WARNING: Model cannot predict absolute kinematics without input kinematics features.{C_RESET}")
-
-#     direct_updates = []
-#     physics_updates = []
-#     if args.predict == 'delta':
-#         if idx_dwv is not None: direct_updates.append('delta Surge Velocity')
-#         if idx_dsv is not None: direct_updates.append('delta Sway Velocity')
-#         if idx_dyr is not None: direct_updates.append('delta Yaw Rate')
-#         if idx_dya is not None: direct_updates.append('delta Yaw Angle')
-#         if idx_wv is not None: physics_updates.append('Surge Velocity(integrated from delta Surge Velocity)')
-#         if idx_sv is not None: physics_updates.append('Sway Velocity(integrated from delta Sway Velocity)')
-#         if idx_yr is not None: physics_updates.append('Yaw Rate(integrated from delta Yaw Rate)')
-#         if idx_ya is not None: physics_updates.append('Yaw Angle(integrated from delta Yaw Angle)')
-#     else: # motion
-#         if idx_wv is not None: direct_updates.append('Surge Velocity')
-#         if idx_sv is not None: direct_updates.append('Sway Velocity')
-#         if idx_yr is not None: direct_updates.append('Yaw Rate')
-#         if idx_ya is not None: direct_updates.append('Yaw Angle')
-#         if idx_dwv is not None: physics_updates.append('delta Surge Velocity (differentiated from Surge Velocity)')
-#         if idx_dsv is not None: physics_updates.append('delta Sway Velocity (differentiated from Sway Velocity)')
-#         if idx_dyr is not None: physics_updates.append('delta Yaw Rate (differentiated from Yaw Rate)')
-#         if idx_dya is not None: physics_updates.append('delta Yaw Angle (differentiated from Yaw Angle)')
-
-#     num_driven = len(direct_updates) + len(physics_updates)
-#     total_feats = len(feat_names)
-
-#     if num_driven == 0:
-#         print("  > Fully Open-Loop (No recursion).")
-#         preds_full = model.forward(x_test, best_params)
-#         return preds_full, 0.0
-
-#     print(f"  > Recursive Loop Active ({num_driven}/{total_feats} features)")
-#     if direct_updates:
-#         print(f"    Direct Feedback: {', '.join(direct_updates)}")
-#     if physics_updates:
-#         print(f"    Physics Feedback: {', '.join(physics_updates)}")
-
-#     recursive_ratio = num_driven / total_feats
-    
-#     curr_window = x_test[0:1, :, :] 
-#     last_step_real = x_scaler.inverse_transform(curr_window[:, -1, :])
-#     recursive_preds = np.zeros((num_samples, horizon, len(args.targets)))
-#     last_wv, last_sv, last_yr, last_ya = 0.0, 0.0, 0.0, 0.0
-
-#     for i in range(num_samples):
-#         preds_full = model.forward(curr_window, best_params)
-#         recursive_preds[i] = preds_full[0]
-#         pred_step = preds_full[:, 0, :] 
-        
-#         next_gt_idx = min(i + 1, num_samples - 1)
-#         next_gt_features_norm = x_test[next_gt_idx:next_gt_idx+1, -1, :] 
-
-#         if y_scaler: pred_step_real = y_scaler.inverse_transform(pred_step)
-#         else: pred_step_real = pred_step
-
-#         next_gt_real = x_scaler.inverse_transform(next_gt_features_norm)
-#         new_row_real = np.copy(next_gt_real)
-        
-#         if args.predict == 'delta':
-#             dwv, dsv,dyr,dya = pred_step_real[0, 0], pred_step_real[0, 1], pred_step_real[0, 2], pred_step_real[0, 3]
-#             if idx_dwv is not None: new_row_real[0, idx_dwv] = dwv
-#             if idx_dsv is not None: new_row_real[0, idx_dsv] = dsv
-#             if idx_dyr is not None: new_row_real[0, idx_dyr] = dyr
-#             if idx_dya is not None: new_row_real[0, idx_dya] = dya
-#             if idx_wv is not None: new_row_real[0, idx_wv] = last_step_real[0, idx_wv] + dwv
-#             if idx_sv is not None: new_row_real[0, idx_sv] = last_step_real[0, idx_sv] + dsv
-#             if idx_yr is not None: new_row_real[0, idx_yr] = last_step_real[0, idx_yr] + dyr
-#             if idx_ya is not None: new_row_real[0, idx_ya] = last_step_real[0, idx_ya] + dya
-#         else: 
-#             wv, sv, yr, ya = pred_step_real[0, 0], pred_step_real[0, 1], pred_step_real[0, 2], pred_step_real[0, 3]
-#             if idx_wv is not None: new_row_real[0, idx_wv] = wv
-#             if idx_sv is not None: new_row_real[0, idx_sv] = sv
-#             if idx_yr is not None: new_row_real[0, idx_yr] = yr
-#             if idx_ya is not None: new_row_real[0, idx_ya] = ya
-#             if idx_dwv is not None: 
-#                 new_row_real[0, idx_dwv] = wv- last_wv
-#                 last_wv = wv
-#             if idx_dsv is not None:
-#                 new_row_real[0, idx_dsv] = sv - last_sv 
-#                 last_sv = sv
-#             if idx_dyr is not None:
-#                 new_row_real[0, idx_dyr] = yr - last_yr 
-#                 last_yr = yr
-#             if idx_dya is not None:
-#                 new_row_real[0, idx_dya] = ya - last_ya 
-#                 last_ya = ya
-
-#         last_step_real = new_row_real
-#         new_row_norm = x_scaler.transform(new_row_real)
-#         curr_window = np.concatenate([curr_window[:, 1:, :], new_row_norm.reshape(1, 1, -1)], axis=1)
-
-#     return recursive_preds, recursive_ratio
-    
 
 def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     """Runs BOTH one-step (Teacher Forcing) and recursive (Dead Reckoning) evaluations."""
