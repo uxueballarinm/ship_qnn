@@ -1,0 +1,108 @@
+# -----------------------------------------------------------------------------
+# MAPPING SEARCH: Finding the best qubit assignment for Head 2 (Dynamics)
+# -----------------------------------------------------------------------------
+
+# MAP 1: Standard (Sway -> Q0, Rate -> Q1, Rudder -> Q2)
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: motion
+  optimizer: cobyla
+  maxiter: 4000
+  initialization: identity
+  reorder: false
+  run: [0, 1, 2] # 3 Seeds per map
+
+  heads_config:
+    - features: ['wv', 'sv', 'rarad'] # Head 1: Surge (Standard)
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['sv', 'yr', 'rarad'] # Head 2: Dynamics (The Focus)
+      output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]  # <--- STANDARD
+    - features: ['ya', 'yr']          # Head 3: Kinematics (Standard)
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, -1]
+
+# MAP 2: Rudder Centered (Sway -> Q0, Rudder -> Q1, Rate -> Q2)
+# Theory: Rudder affects BOTH Sway and Rate. Putting it in the middle (Q1) 
+# maximizes its entanglement with neighbors Q0 and Q2.
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: motion
+  optimizer: cobyla
+  maxiter: 4000
+  initialization: identity
+  reorder: false
+  run: [0, 1, 2]
+
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['sv', 'yr', 'rarad'] # Head 2
+      output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 2, 1]  # <--- RUDDER CENTERED
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, -1]
+
+# MAP 3: Inverted (Rudder -> Q0, Rate -> Q1, Sway -> Q2)
+# Theory: Qubits have different noise levels. Maybe Q0 is better for the Action.
+- window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: motion
+  optimizer: cobyla
+  maxiter: 4000
+  initialization: identity
+  reorder: false
+  run: [0, 1, 2]
+
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['sv', 'yr', 'rarad'] # Head 2
+      output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [2, 1, 0]  # <--- INVERTED
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, -1]

@@ -1,5 +1,9 @@
-# EXPERIMENT 3.1: Circular Entanglement
-# Testing if Ring Topology matches ship loop dynamics better.
+# -----------------------------------------------------------------------------
+# HYPERPARAMETER SWEEP: Topology and Depth
+# -----------------------------------------------------------------------------
+
+# SWEEP 1: Leaner Dynamics (Reps=2)
+# Hypothesis: 3 reps (100+ params) is too hard to optimize. 2 reps might train better.
 - window_size: 5
   select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
   model: multihead
@@ -16,18 +20,25 @@
       reps: 3
       encoding: compact
       ansatz: efficientsu2
-      entangle: circular # <--- CHANGE
+      entangle: full
       map: [0, 1, 2]
-    - features: ['sv', 'yr', 'ya', 'rarad']
-      output_dim: 3
-      reps: 3
+    - features: ['sv', 'yr', 'rarad'] # Head 2
+      output_dim: 2
+      reps: 2             # <--- CHANGE: Reduced Depth
       encoding: compact
       ansatz: efficientsu2
-      entangle: circular # <--- CHANGE
-      map: [0, 1, 2, 3, -1, -1]
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, -1]
 
-# EXPERIMENT 3.2: Lean Surge Head
-# Reducing Surge complexity to prevent overfitting and stabilize drift.
+# SWEEP 2: Circular Entanglement
+# Hypothesis: "Circular" topology matches the cyclic nature of Yaw/Sway physics better.
 - window_size: 5
   select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
   model: multihead
@@ -41,15 +52,22 @@
   heads_config:
     - features: ['wv', 'sv', 'rarad']
       output_dim: 1
-      reps: 1             # <--- CHANGE: Shallow
+      reps: 3
       encoding: compact
       ansatz: efficientsu2
-      entangle: full
+      entangle: circular  # <--- CHANGE
       map: [0, 1, 2]
-    - features: ['sv', 'yr', 'ya', 'rarad']
-      output_dim: 3
-      reps: 3             # Keep deep for turning
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2
+      reps: 3
       encoding: compact
       ansatz: efficientsu2
-      entangle: full
-      map: [0, 1, 2, 3, -1, -1]
+      entangle: circular  # <--- CHANGE
+      map: [0, 1, 2]
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: circular  # <--- CHANGE
+      map: [0, 1, -1]
