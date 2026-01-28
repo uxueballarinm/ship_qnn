@@ -12,12 +12,11 @@ except ImportError:
 
 # --- DEFAULTS (Must match your argparse defaults) ---
 DEFAULTS = {
-    'data': "datasets\zigzag_11_11_ind_reduced_2_s.csv",
+    'data': "reduce_dataset",
     'select_features': ['wv','sv','yr','ya','rarad'],
     'drop_features': None,
     'window_size': 5,
     'horizon': 5,          
-    'testing_fold': 3,
     'predict': 'motion',
     'norm': True,
     'reconstruct_train': False,

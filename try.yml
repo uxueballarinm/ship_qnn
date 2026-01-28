@@ -1,0 +1,78 @@
+# try.yml
+- data: 'reduce_dataset'
+  window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: 'multihead'
+  predict: 'motion'
+
+  # --- SPSA TUNING ---
+  optimizer: 'spsa'
+  batch_size: 64          # Increased: Smoothes out the noise in the gradient approximation
+  maxiter: 3000           # Give it enough time to converge
+  learning_rate: 0.005    # Reduced from 0.01: Prevents bouncing out of the "sweet spot"
+  perturbation: 0.05      # Reduced from 0.1: More precise probing of parameters
+  initialization: 'identity' # 'random' might actually be better if identity gets stuck
+  reorder: False
+
+  # --- MODEL CONFIG ---
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: 'compact'
+      ansatz: 'efficientsu2'
+      entangle: 'full'
+      map: [0, 1, 2]
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2
+      reps: 3
+      encoding: 'compact'
+      ansatz: 'efficientsu2'
+      entangle: 'full'
+      map: [0, 1, 2]
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: 'compact'
+      ansatz: 'realamplitudes'
+      entangle: 'full'
+      map: [0, 1, -1]
+# try.yml
+- data: 'reduce_dataset'
+  window_size: 5
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: 'multihead'
+  predict: 'motion'
+
+  # --- SPSA TUNING ---
+  optimizer: 'spsa'
+  batch_size: 64          # Increased: Smoothes out the noise in the gradient approximation
+  maxiter: 5000           # Give it enough time to converge
+  learning_rate: 0.002    # Reduced from 0.01: Prevents bouncing out of the "sweet spot"
+  perturbation: 0.05      # Reduced from 0.1: More precise probing of parameters
+  initialization: 'identity' # 'random' might actually be better if identity gets stuck
+  reorder: False
+
+  # --- MODEL CONFIG ---
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: 'compact'
+      ansatz: 'efficientsu2'
+      entangle: 'full'
+      map: [0, 1, 2]
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2
+      reps: 3
+      encoding: 'compact'
+      ansatz: 'efficientsu2'
+      entangle: 'full'
+      map: [0, 1, 2]
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: 'compact'
+      ansatz: 'realamplitudes'
+      entangle: 'full'
+      map: [0, 1, -1]

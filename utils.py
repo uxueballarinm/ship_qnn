@@ -2,6 +2,7 @@ import os
 import pickle
 import argparse
 from copy import deepcopy
+import glob
 
 import time
 import datetime
@@ -86,39 +87,145 @@ def map_names(feature_list, reverse=False):
             elif code in code_to_name.values():columns.append(code) 
             else: raise ValueError(f"Unknown feature code: '{code}'. Available: {list(code_to_name.keys())}")
         return columns
-def get_seqs(df, feature_columns_used, prediction_columns_used):
-    return df[feature_columns_used].to_numpy(), df[prediction_columns_used].to_numpy()
 
-def get_fold_indices(total_length, num_folds=4):
-    fold_size = math.ceil(total_length / num_folds)
-    split_indices = [0]
-    for i in range(1, num_folds):
-        next_idx = min(fold_size * i, total_length)
-        split_indices.append(next_idx)
-    if split_indices[-1] != total_length: # Ensure the last index is exactly the total length
-        split_indices.append(total_length)
-    return split_indices
-
-def make_sliding_window_ycustom_folds(x, y, window_size, horizon_size, num_folds=4):
-
-    split_indices = get_fold_indices(len(x), num_folds)
+def process_single_df(df):
+    """Performs feature engineering on a single dataframe."""
+    # 1. Deltas
+    for col in ['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']:
+        if col in df.columns:
+            df[f'delta {col}'] = df[col].diff().fillna(0)
     
-    x_data_folds, y_data_folds = [], []
+    # 2. Shift Controls (Action at t affects State at t+1)
+    control_cols = ["Rudder Angle (deg)", "Rudder Angle (rad)"]
+    for col in control_cols:
+        if col in df.columns:
+            df[col] = df[col].shift(-1)
+            
+    # 3. Drop NaNs created by shifting
+    df.dropna(inplace=True)
+    return df
+def sliding_window(x, y, window_size, horizon):
+    """Creates windows from a single continuous trajectory."""
+    x_wins, y_wins = [], []
+    # Stop when we don't have enough data for a full window + horizon
+    limit = len(x) - window_size - horizon + 1
+    
+    for i in range(limit):
+        x_wins.append(x[i : i + window_size])
+        y_wins.append(y[i + window_size : i + window_size + horizon])
+        
+    return np.array(x_wins), np.array(y_wins)
+def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None, fit_scalers=False):
+    """
+    Loads all CSVs from a directory, processes them individually, 
+    normalizes them (fitting on Train only), and stacks them into a dataset.
+    """
+    # 1. Load Files
+    files = glob.glob(os.path.join(directory, "*.csv"))
+    if not files:
+        raise ValueError(f"No CSV files found in {directory}")
+    
+    print(f"Loading {len(files)} files from {directory}...")
+    
+    raw_dfs = [pd.read_csv(f, index_col=0) for f in files]
+    processed_dfs = [process_single_df(df.copy()) for df in raw_dfs]
+    
+    # 2. Resolve Features/Targets (Using first DF to check columns)
+    if not hasattr(args, 'features_resolved') or not args.features_resolved:
+        select_list = getattr(args, 'select_features', None)
+        drop_list = getattr(args, 'drop_features', None)
+        if select_list:
+            args.features = map_names(args.select_features)
+        elif drop_list:
+            args.features = [f for f in full_feature_set if f not in map_names(args.drop_features)]
+        else:
+            args.features = full_feature_set
+        
+        if args.predict == "motion": args.targets = ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
+        elif args.predict == "delta": args.targets = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"]
+        args.features_resolved = True # Flag to avoid re-resolving
 
-    for k in range(num_folds):
-        fold_x, fold_y = [], []
+    # 3. Extract Raw Sequences
+    x_seqs, y_seqs = [], []
+    for df in processed_dfs:
+        x_seqs.append(df[args.features].values)
+        y_seqs.append(df[args.targets].values)
         
-        start_idx, end_idx = split_indices[k], split_indices[k+1]
+    # 4. Fit Scalers (ONLY if this is the training set)
+    if fit_scalers:
+        all_x = np.concatenate(x_seqs, axis=0)
+        all_y = np.concatenate(y_seqs, axis=0)
         
-        for i in range(start_idx, end_idx):
-            if i + window_size + horizon_size <= end_idx:
-                fold_x.append(x[i : i + window_size])
-                fold_y.append(y[i + window_size : i + window_size + horizon_size])
+        x_scaler = MinMaxScaler(feature_range=(0, np.pi))
+        x_scaler.fit(all_x)
+        
+        if args.norm:
+            y_scaler = MinMaxScaler(feature_range=(-1, 1))
+            y_scaler.fit(all_y)
+        else:
+            y_scaler = None
+            
+    # 5. Normalize & Window (Per Sequence to avoid jumps)
+    final_x_wins, final_y_wins = [], []
+    
+    for x, y in zip(x_seqs, y_seqs):
+        # Normalize
+        x_norm = x_scaler.transform(x)
+        x_norm = np.clip(x_norm, 0, np.pi)
+        
+        if args.norm and y_scaler:
+            y_norm = y_scaler.transform(y)
+        else:
+            y_norm = y
+            
+        # Window
+        xw, yw = sliding_window(x_norm, y_norm, args.window_size, args.horizon)
+        if len(xw) > 0:
+            final_x_wins.append(xw)
+            final_y_wins.append(yw)
+            
+    if not final_x_wins:
+        raise ValueError(f"No valid windows created from {directory}. Check window_size/horizon vs file lengths.")
+
+    # 6. Stack
+    X_data = np.concatenate(final_x_wins, axis=0)
+    Y_data = np.concatenate(final_y_wins, axis=0)
+    
+    return X_data, Y_data, x_scaler, y_scaler
+# def get_seqs(df, feature_columns_used, prediction_columns_used):
+#     return df[feature_columns_used].to_numpy(), df[prediction_columns_used].to_numpy()
+
+# def get_fold_indices(total_length, num_folds=4):
+#     fold_size = math.ceil(total_length / num_folds)
+#     split_indices = [0]
+#     for i in range(1, num_folds):
+#         next_idx = min(fold_size * i, total_length)
+#         split_indices.append(next_idx)
+#     if split_indices[-1] != total_length: # Ensure the last index is exactly the total length
+#         split_indices.append(total_length)
+#     return split_indices
+
+# def make_sliding_window_ycustom_folds(x, y, window_size, horizon_size, num_folds=4):
+
+#     split_indices = get_fold_indices(len(x), num_folds)
+    
+#     x_data_folds, y_data_folds = [], []
+
+#     for k in range(num_folds):
+#         fold_x, fold_y = [], []
+        
+#         start_idx, end_idx = split_indices[k], split_indices[k+1]
+        
+#         for i in range(start_idx, end_idx):
+#             if i + window_size + horizon_size <= end_idx:
+#                 fold_x.append(x[i : i + window_size])
+#                 fold_y.append(y[i + window_size : i + window_size + horizon_size])
                 
-        x_data_folds.append(np.array(fold_x))
-        y_data_folds.append(np.array(fold_y))
+#         x_data_folds.append(np.array(fold_x))
+#         y_data_folds.append(np.array(fold_y))
         
-    return x_data_folds, y_data_folds
+#     return x_data_folds, y_data_folds
+
 
 # ==============================================================================
 # 2. CIRCUIT CONSTRUCTION
@@ -462,7 +569,10 @@ class MultiHeadQNN:
 
 def _compute_loss(args, pred, target, reconstruct, scaler=None):
     num_targets = target.shape[-1]
-    
+    weights = np.array([10.0, 0.5, 0.5, 5.0])
+    # Safety: If output dim changes, revert to equal weights to prevent crash
+    if len(weights) != num_targets:
+        weights = np.ones(num_targets)
     if reconstruct and scaler:
 
         target_real = scaler.inverse_transform(target.reshape(-1, num_targets)).reshape(target.shape)
@@ -471,13 +581,29 @@ def _compute_loss(args, pred, target, reconstruct, scaler=None):
         if args.predict == 'delta':
             target_traj = np.cumsum(target_real, axis=1)
             pred_traj = np.cumsum(pred_real, axis=1)
-            return np.mean((pred_traj - target_traj) ** 2)
+            sq_diff = (pred_traj - target_traj) ** 2
+            weighted_diff = sq_diff * weights  # Broadcasting applies weight to last axis
+            return np.mean(weighted_diff)
+            # return np.mean((pred_traj - target_traj) ** 2)
         
-        else: return np.mean((pred_real - target_real) ** 2)
+        else: 
+            # Weighted MSE for Real Values
+            sq_diff = (pred_real - target_real) ** 2
+            weighted_diff = sq_diff * weights
+            return np.mean(weighted_diff)
+            # return np.mean((pred_real - target_real) ** 2)
 
     else:
         if reconstruct and not scaler: print(f'{C_YELLOW}WARNING: Scaler missing --> Cannot reconstruct trajectory.{C_RESET}')
-        return np.mean((pred - target) ** 2)
+        sq_diff = (pred - target) ** 2
+        
+        # Apply Weights:
+        # If Surge error is 0.01 -> becomes 0.1 (Visible to optimizer)
+        # If Sway error is 0.01 -> stays 0.01
+        weighted_diff = sq_diff * weights
+        
+        return np.mean(weighted_diff)
+        # return np.mean((pred - target) ** 2)
 
 def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
 
@@ -502,7 +628,7 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train, scaler)
 
         check_val = True 
-        if use_batching and len(train_history) % 10 != 0:
+        if use_batching and len(train_history) % 100 != 0:
             check_val = False
         if check_val:
             val_preds = model.forward(x_val, params)
@@ -650,8 +776,7 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     num_samples = x_test.shape[0]; horizon = args.horizon        
     num_targets = len(args.targets)
     state_vars = ['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']
-    direct_updates = []
-    physics_updates = []
+    direct_updates, physics_updates = [], []
     update_rules = {} 
     
     for t_idx, t_name in enumerate(args.targets):
@@ -664,23 +789,14 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
             # If target is Delta and Feature is Delta -> DIRECT and If target is Motion and Feature is Motion -> DIRECT
             update_rules[t_idx].append((f_idx, "DIRECT"))
             direct_updates.append(t_name)
-        secondary_name = None
-        mode = None
+        secondary_name, mode = None, None
         
         if is_target_delta:
-            # We have Delta, look for Motion to Integrate
             clean = t_name.replace("delta ", "").strip()
-            if clean in args.features: 
-                secondary_name = clean
-                mode = "INTEGRATE"
-                physics_updates.append(f"{clean} (Integrated)")
+            if clean in args.features: secondary_name, mode = clean, "INTEGRATE"; physics_updates.append(f"{clean} (Integrated)")
         else:
-            # We have Motion, look for Delta to Differentiate
             delta_ver = f"delta {t_name}"
-            if delta_ver in args.features: 
-                secondary_name = delta_ver
-                mode = "DIFF"
-                physics_updates.append(f"{delta_ver} (Differentiated)")
+            if delta_ver in args.features: secondary_name, mode = delta_ver, "DIFF"; physics_updates.append(f"{delta_ver} (Differentiated)")
         
         if secondary_name:
             f_idx_sec = args.features.index(secondary_name)
@@ -737,14 +853,10 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         for t_idx, updates in update_rules.items():
             pred_val = pred_step_real[0, t_idx]
             for f_idx, mode in updates:
-                if mode == "DIRECT":
-                    next_input_real[0, f_idx] = pred_val
-                elif mode == "INTEGRATE":
-                    old_val = last_feat_real[0, f_idx]
-                    next_input_real[0, f_idx] = old_val + pred_val
+                if mode == "DIRECT": next_input_real[0, f_idx] = pred_val
+                elif mode == "INTEGRATE": next_input_real[0, f_idx] = last_feat_real[0, f_idx] + pred_val
                 elif mode == "DIFF":
-                    if i == 0: diff_val = pred_val 
-                    else: diff_val = pred_val - last_pred_values[t_idx]
+                    diff_val = pred_val if i == 0 else pred_val - last_pred_values[t_idx]
                     next_input_real[0, f_idx] = diff_val
 
         # Update trackers
@@ -771,8 +883,7 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         preds_real_step = y_scaler.inverse_transform(preds_norm_step.reshape(-1, num_targets)).reshape(orig_shape)
         y_gt_real = y_scaler.inverse_transform(y_test.reshape(-1, num_targets)).reshape(orig_shape)
     else:
-        preds_real_step = preds_norm_step
-        y_gt_real = y_test
+        preds_real_step = preds_norm_step; y_gt_real = y_test
 
     # Step metrics
     results['Step_MSE'] = mean_squared_error(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
@@ -796,8 +907,7 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         pred_path_global_open = preds_real_step
 
     results['Local_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_local.reshape(-1, num_targets))
-    norm_local_error = np.linalg.norm(true_path - pred_path_local, axis=2)
-    results['Local_ADE'] = np.mean(norm_local_error)
+    results['Local_ADE'] = np.mean(np.linalg.norm(true_path - pred_path_local, axis=2))
     for i, name in enumerate(target_names):
         true_i = true_path[..., i].flatten()
         pred_i = pred_path_local[..., i].flatten()
@@ -851,13 +961,9 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         pred_i = pred_path_global[..., i].flatten()
         abs_err = np.abs(true_path[..., i] - pred_path_global[..., i])
         
-        mse_i = mean_squared_error(true_i, pred_i)
-        r2_i = r2_score(true_i, pred_i)
-        max_i = np.max(abs_err)
-        
         # Store individual metrics
-        results[f'{name}_Global_closed_MSE'] = mse_i
-        results[f'{name}_Global_closed_R2']  = r2_i
+        results[f'{name}_Global_closed_MSE'] = mean_squared_error(true_i, pred_i)
+        results[f'{name}_Global_closed_R2']  =r2_score(true_i, pred_i)
         results[f'{name}_Global_closed_ADE'] = np.mean(abs_err)    
         results[f'{name}_Global_closed_FDE'] = np.mean(abs_err[:, -1])  
 
@@ -901,11 +1007,8 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     if isinstance(qnn_dict, list):
         # Sum quantum params from all heads
         for head_dict in qnn_dict:
-            if isinstance(head_dict, dict) and 'weight_params' in head_dict:
-                num_q_params += len(head_dict['weight_params'])
-    elif isinstance(qnn_dict, dict) and 'weight_params' in qnn_dict:
-        # Vanilla case
-        num_q_params = len(qnn_dict['weight_params'])
+            if isinstance(head_dict, dict) and 'weight_params' in head_dict: num_q_params += len(head_dict['weight_params'])
+    elif isinstance(qnn_dict, dict) and 'weight_params' in qnn_dict: num_q_params = len(qnn_dict['weight_params'])
     
     num_c_params = total_params - num_q_params
 
@@ -926,18 +1029,10 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         return str(values_list)
 
     if getattr(args, 'model', '') == 'multihead' and hasattr(args, 'heads_config') and args.heads_config:
-        list_ansatz = []
-        list_entangle = []
-        list_reps = []
-        list_encoding = []
-        list_map = []
-        list_features = []
-
+        list_ansatz, list_entangle, list_reps, list_encoding, list_map, list_features = [], [], [], [], [], []
         for h in args.heads_config:
-            short_a = map_names([h.get('ansatz', args.ansatz)], reverse=True)[0]
-            short_e = map_names([h.get('entangle', args.entangle)], reverse=True)[0]
-            list_ansatz.append(short_a)
-            list_entangle.append(short_e)
+            list_ansatz.append(map_names([h.get('ansatz', args.ansatz)], reverse=True)[0])
+            list_entangle.append(map_names([h.get('entangle', args.entangle)], reverse=True)[0])
             list_reps.append(h.get('reps', getattr(args, 'reps', 'N/A')))
             list_encoding.append(h.get('encoding', getattr(args, 'encoding', 'N/A')))
             list_map.append(h.get('map', getattr(args, 'map', 'N/A')))
@@ -961,7 +1056,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     safe_entangle = clean_filename_str(final_entangle)
     safe_reps = clean_filename_str(final_reps)
 
-    model_filename = os.path.join("models", f"{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{safe_ansatz}_{safe_entangle}_r{safe_reps}.pkl")
+    model_filename = os.path.join("models", f"{timestamp}_{args.model}_{args.optimizer}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{safe_ansatz}_{safe_entangle}_r{safe_reps}.pkl")
     
     save_payload = {
         "config": vars(args),
@@ -981,11 +1076,8 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     excel_filename = os.path.join("logs", "experiments_summary.xlsx")
     m_final = final_eval['metrics']
     
-    try:
-        dt_temp = datetime.datetime.strptime(timestamp, "%m-%d_%H-%M-%S")
-        dt_object = dt_temp.replace(year=2026)
-    except ValueError:
-        dt_object = timestamp 
+    try: dt_object = datetime.datetime.strptime(timestamp, "%m-%d_%H-%M-%S").replace(year=2026)
+    except ValueError: dt_object = timestamp 
 
     raw_data = {}
     
@@ -998,16 +1090,12 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         return v
     
     for key, value in vars(args).items():
-        if key not in ignore_keys:
-            raw_data[key] = clean_val(value)
+        if key not in ignore_keys: raw_data[key] = clean_val(value)
 
     # B. Add Resolved Configs
-    raw_data['features'] = str(final_features)
-    raw_data['ansatz'] = str(final_ansatz)
-    raw_data['entangle'] = str(final_entangle)
-    raw_data['reps'] = str(final_reps)
-    raw_data['encoding'] = str(final_encoding)
-    raw_data['map'] = str(final_map)
+    raw_data['features'] = str(final_features); raw_data['ansatz'] = str(final_ansatz)
+    raw_data['entangle'] = str(final_entangle); raw_data['reps'] = str(final_reps)
+    raw_data['encoding'] = str(final_encoding); raw_data['map'] = str(final_map)
     
     # C. Add Meta & Metrics
     raw_data['date'] = dt_object
@@ -1055,7 +1143,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
 
     # E. Build Final Column List (User Defined Order)
     final_column_order = [
-        "date", "model_id", "run", "testing_fold", "data", "data_n", "data_dt", 
+        "date", "model_id", "run", "data", "data_n", "data_dt", 
         "features", "targets", "window_size", "horizon", "predict", "norm", 
         "reconstruct_train", "reconstruct_val", "model", "encoding", "ansatz", 
         "entangle", "reps", "map", "reorder", "total params", "q params", 
@@ -1123,7 +1211,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
 
     log_filename = "logs/experiment_log.txt"
-    log_entry = f"[{timestamp}] {args.model:<10} | F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<15} {str(final_entangle):<14} reps={str(final_reps):<2} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
+    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<15} {str(final_entangle):<14} reps={str(final_reps):<2} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
     with open(log_filename, "a") as f: f.write(log_entry)
     
     print(f"\n[Logger] Model saved to {model_filename}")
@@ -1142,7 +1230,7 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
     total_params = sum(p.numel() for p in state_dict.values())
 
     # 2. Save Model (Pickle)
-    model_filename = f"models/{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl"
+    model_filename = f"models/{timestamp}_classical_adam_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl"
     
     save_payload = {
         "config": vars(args),
@@ -1242,7 +1330,7 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         
     column_order = [
         # 1. ID & Meta
-        "date", "model_id", "run", "testing_fold",
+        "date", "model_id", "run",
         
         # 2. Dataset Info
         "data", "data_n", "data_dt", 
@@ -1307,7 +1395,8 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         
     print(f"\n[Logger] Classical model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
-def load_experiment_results(filepath):
+    
+def load_experiment_results(filepath, final = True):
     """
     Loads a saved experiment pickle file and prints a comprehensive summary,
     including a detailed per-feature metric table with Step, Local, Open, and Closed metrics.
@@ -1321,8 +1410,8 @@ def load_experiment_results(filepath):
         data = pickle.load(f)
         
     config = data.get('config', {})
-    m_best = data.get('best_eval_metrics', {})
-    m_final = data.get('final_eval_metrics', {}) # We report final weights metrics
+    # m_best = data.get('best_eval_metrics', {})
+    m_final = data.get('final_eval_metrics', {}) if final == True else data.get('best_eval_metrics', {}) # We report final weights metrics
     
     # Model type detection fallback
     if config.get('model') is None:

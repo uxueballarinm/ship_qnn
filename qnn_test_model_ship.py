@@ -1,9 +1,4 @@
-# Works for models after 12-11_14-00-00
-# For models after 12-18_12-30-00 use load_experiment_results()
-
-import argparse
 from utils import *
-from copy import deepcopy
 
 class Args:
     """Helper to convert dict to object for compatibility with utils"""
@@ -43,15 +38,14 @@ def run_test(cli_args):
     # We still need to load the CSV to get the actual test values
     df = pd.read_csv(data_path, index_col=0)
     
-    df['delta Surge Velocity'] = df['Surge Velocity'].diff().fillna(0)
-    df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
-    df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
-    df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
+    df = process_single_df(df)
     
     # Reconstruct column lists based on config string
     cols = args.features
     pred_cols = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"] if args.predict == "delta" else ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
-    
+    missing = [c for c in cols + pred_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in test data: {missing}. Check feature naming.")
     # Extract and Scale
     feature_seqs = df[cols].to_numpy()
     prediction_seqs = df[pred_cols].to_numpy()
@@ -63,9 +57,9 @@ def run_test(cli_args):
     else: pred_norm = prediction_seqs
 
     # Fold Logic
-    x_folds, y_folds = make_sliding_window_ycustom_folds(feat_norm, pred_norm, args.window_size, args.horizon)
-    x_test = x_folds[args.testing_fold]
-    y_test = y_folds[args.testing_fold]
+    x_test, y_test = sliding_window(feat_norm, pred_norm, args.window_size, args.horizon)
+    
+    print(f"Test Data Shape: X={x_test.shape}, Y={y_test.shape}")
 
     # 4. INITIALIZE & RECONSTRUCT MODEL
     
@@ -88,6 +82,7 @@ def run_test(cli_args):
                 setattr(head_args, k, v)
 
             # 4b. Rebuild Circuit
+            head_args.features = map_names(head_cfg['features'])
             qc_head, in_p_head, w_p_head = create_multivariate_circuit(head_args)
             
             # 4c. Rebuild Estimator
@@ -224,10 +219,10 @@ if __name__ == "__main__":
     parser.add_argument('--version', type=str, choices=['old', 'new','save'],default='old', help="Choose 'old' to run test and generate plots, 'new' to load results, 'save' to save test results")
     parser.add_argument('--model', type=str, required=True, help="Path to .pkl")
     parser.add_argument('--data', type=str, default="datasets\zigzag_11_11_ind_reduced_2_s.csv")
-    parser.add_argument('--final', action='store_true')
+    parser.add_argument('--final',type=str2bool, default=False, choices=[True, False])
     parser.add_argument('--show_plot', type=str2bool, default=False, choices=[True, False], help="Show plots interactively")
     parser.add_argument('--save_plot', type=str2bool, default=True, choices=[True, False], help="Save plots to files")
     args = parser.parse_args()
     
     if args.version in ['old', 'save']:  run_test(args)
-    else: load_experiment_results(args.model)
+    else: load_experiment_results(args.model, final=args.final)
