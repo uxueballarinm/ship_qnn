@@ -90,13 +90,13 @@ def reduce_dataset(input_path, output_path=None, mode='total_points', value=1000
 if __name__ == "__main__":
     
     # CHANGE THIS to your file path
-    file_path = "datasets\zigzag_11_11_ind.csv"
+    file_path = "dataset/validation/zigzag_18_18_ind.csv"
     
     # # OPTION 1: Keep exactly 500 points (spread across the whole file)
     # reduce_dataset(file_path, mode='total_points', value=500)
     
     # OPTION 2: Take 1 point every 2.0 seconds
-    reduce_dataset(file_path, mode='time_interval', output_path="datasets\zigzag_11_11_ind_reduced_2_s.csv", value=2.0, time_col='Time (s)')
+    reduce_dataset(file_path, mode='time_interval', output_path="reduce_dataset_cobyla/validation/zigzag_18_18_ind_reduced_2_s.csv", value=2.0, time_col='Time (s)')
     
     # # OPTION 3: Just take the first 1000 rows
     # reduce_dataset(file_path, mode='cutoff', value=1000)

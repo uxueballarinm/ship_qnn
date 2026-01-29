@@ -567,9 +567,9 @@ class MultiHeadQNN:
         return np.concatenate(params_list)
 
 
-def _compute_loss(args, pred, target, reconstruct, scaler=None):
+def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
     num_targets = target.shape[-1]
-    weights = np.array([10.0, 0.5, 0.5, 5.0])
+    
     # Safety: If output dim changes, revert to equal weights to prevent crash
     if len(weights) != num_targets:
         weights = np.ones(num_targets)
@@ -625,14 +625,14 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         else:
             x_input,y_target = x_train, y_train
         preds = model.forward(x_input, params)
-        train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train, scaler)
+        train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train,args.weights, scaler)
 
         check_val = True 
         if use_batching and len(train_history) % 100 != 0:
             check_val = False
         if check_val:
             val_preds = model.forward(x_val, params)
-            val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, scaler)
+            val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, args.weights, scaler)
             if val_mse < best_val_loss:
                 best_val_loss = val_mse
                 best_params = np.copy(params) #NOTE: Usually final weights are better
@@ -733,7 +733,7 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
                 val_preds = model(x_v)
                 v_p_np = val_preds.cpu().numpy().reshape(-1, args.horizon, num_targets)
                 v_y_np = y_v.cpu().numpy().reshape(-1, args.horizon, num_targets)                
-                batch_loss = _compute_loss(args, v_p_np, v_y_np, args.reconstruct_val, y_scaler) 
+                batch_loss = _compute_loss(args, v_p_np, v_y_np, args.reconstruct_val, args.weights, y_scaler) 
                 val_loss_accum += batch_loss * x_v.size(0)
                 total_samples += x_v.size(0)
         

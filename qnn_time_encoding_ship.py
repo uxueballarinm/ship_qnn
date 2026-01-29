@@ -192,7 +192,8 @@ if __name__=="__main__":
     parser.add_argument('-lr','--learning_rate', type = float, default = 0.01)
     parser.add_argument('-p','--perturbation',type = float, default = 0.1)
     parser.add_argument('--batch_size', type=int, default=32, help="Batch size for optimizers that support mini-batching (e.g., SPSA). Ignored for full-batch optimizers like COBYLA.")
-
+    parser.add_argument('--weights', type = str, default="[1.0, 1.0, 1.0, 1.0]", help="Weights for the loss function.")
+    
     parser.add_argument('--show_plot', type = str2bool, default=False)
     parser.add_argument('--save_plot', type = str2bool, default=True)
     parser.add_argument('--run', type=int, default=0)

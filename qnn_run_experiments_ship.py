@@ -36,6 +36,7 @@ DEFAULTS = {
     'batch_size': 32,
     'learning_rate': 0.01,
     'perturbation': 0.1,
+    'weights': [1.0, 1.0, 1.0, 1.0],
     'show_plot': False,
     'save_plot': True,   
     'run': 0,
