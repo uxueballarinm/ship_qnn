@@ -1,0 +1,40 @@
+- window_size: 5
+  data: reduce_dataset
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: motion
+  
+  optimizer: spsa
+  maxiter: 6000           # 6000 iters * 64 batch is very fast (< 1 hour)
+  batch_size: 64          # Safe now due to Paired Batching
+  learning_rate: [0.02, 0.001] # Dynamic LR: Start aggressive, end fine
+  perturbation: 0.1
+  weights: [5.0, 1.0, 1.0, 1.0] # High penalty for Surge
+  
+  run: [0]
+
+  heads_config:
+    # 3-Head Fixed (Surge + Yaw Rate, Yaw + Rudder)
+    - features: ['wv', 'sv', 'yr', 'rarad'] 
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2, 3,-1,-1]
+
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+
+    - features: ['ya', 'yr', 'rarad']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, 2]

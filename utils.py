@@ -611,24 +611,61 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     best_params = None
     
     train_history, val_history = [], []
+    
     optimizer_name = args.optimizer.upper()
-    use_batching = (optimizer_name == 'SPSA')
     # Use default 32 if not specified in args
     batch_size = getattr(args, 'batch_size', 32)
+    use_batching = (optimizer_name == 'SPSA') and (batch_size < x_train.shape[0])
     
     num_train_samples = x_train.shape[0]
+    learning_rate_arg = args.learning_rate
+    if optimizer_name == 'SPSA':
+        if isinstance(learning_rate_arg,list) and len(learning_rate_arg) == 2:
+            lr_start, lr_end = learning_rate_arg
+            print(f"[Optimizer] Dynamic SPSA Learning Rate: {lr_start} -> {lr_end}")
+            
+            def get_lr_at_k(k):
+                progress = min(k, args.maxiter) / args.maxiter
+                return lr_start - (lr_start - lr_end) * progress
+            
+            # 2. Generator Factory (Used for OPTIMIZER only)
+            # SPSA calls this. It needs no arguments. It yields values forever.
+            def lr_generator_factory():
+                k = 0
+                while True:
+                    yield get_lr_at_k(k)
+                    k += 1
+            
+            # ASSIGN THE FUNCTIONS, DO NOT CALL THEM
+            spsa_lr_optimizer = lr_generator_factory
+            spsa_learning_rate = get_lr_at_k
+        else:
+            # Handle standard float case
+            val = learning_rate_arg[0] if isinstance(learning_rate_arg, list) else learning_rate_arg
+            print(f"[Optimizer] Static SPSA Learning Rate: {val}")
+            def static_generator():
+                while True: yield float(val)
+            spsa_lr_optimizer = static_generator
+            spsa_learning_rate = lambda k: float(val)
+    current_batch_x = None
+    current_batch_y = None
+    call_counter = 0
     def objective_function(params):
-        nonlocal best_val_loss, best_params
+        nonlocal best_val_loss, best_params, current_batch_x, current_batch_y, call_counter
         if use_batching:
-            indices = np.random.choice(num_train_samples, size=batch_size, replace=False)
-            x_input, y_target = x_train[indices], y_train[indices]
+            if call_counter % 2 == 0:
+                indices = np.random.choice(num_train_samples, size=batch_size, replace=False)
+                current_batch_x, current_batch_y = x_train[indices], y_train[indices]
+            
+            x_input, y_target = current_batch_x, current_batch_y
         else:
             x_input,y_target = x_train, y_train
+        call_counter += 1
         preds = model.forward(x_input, params)
         train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train,args.weights, scaler)
-
+        current_iter = call_counter // 2
         check_val = True 
-        if use_batching and len(train_history) % 100 != 0:
+        if use_batching and current_iter % 50 != 0:
             check_val = False
         if check_val:
             val_preds = model.forward(x_val, params)
@@ -638,11 +675,25 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
                 best_params = np.copy(params) #NOTE: Usually final weights are better
         else:
             val_mse = val_history[-1] if val_history else train_mse
-        train_history.append(train_mse); val_history.append(val_mse)
+        if optimizer_name == 'SPSA':
+            if call_counter % 2 == 0:
+                train_history.append(train_mse)
+                val_history.append(val_mse)
 
-        log_interval = 100 if use_batching else 50
-        if len(train_history) % log_interval == 0:
-            print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
+                log_interval = 100
+                if len(train_history) % log_interval == 0:
+                    if spsa_learning_rate:
+                        lr_val = spsa_learning_rate(len(train_history))
+                        lr_str = f" {lr_val:.5f}"
+                    else:
+                        lr_str = "N/A"
+                    print(f"  > Iter {len(train_history):4d} | Train: {train_mse:.5f} | Val: {val_mse:.5f} | LR: {lr_str}")
+        else:
+            train_history.append(train_mse); val_history.append(val_mse)
+
+            log_interval = 100 if use_batching else 50
+            if len(train_history) % log_interval == 0:
+                print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
         return train_mse
    
 
@@ -655,10 +706,10 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     initial_weights = model.initialize_parameters(args.initialization)
 
     if args.optimizer.upper() == 'COBYLA':
-        opt = COBYLA(maxiter=args.maxiter, tol = None)
+        opt = COBYLA(maxiter=args.maxiter, tol = args.tolerance)
         res = opt.minimize(fun=objective_function, x0=initial_weights)
     elif args.optimizer.upper() == 'SPSA':
-        opt = SPSA(maxiter=args.maxiter,learning_rate=args.learning_rate, perturbation=args.perturbation) 
+        opt = SPSA(maxiter=args.maxiter,learning_rate=spsa_lr_optimizer, perturbation=args.perturbation) 
         res = opt.minimize(fun=objective_function, x0=initial_weights)
     else:
         raise ValueError(f"Optimizer {optimizer_name} not supported.")
