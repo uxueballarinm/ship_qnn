@@ -143,6 +143,7 @@ def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None
         
         if args.predict == "motion": args.targets = ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
         elif args.predict == "delta": args.targets = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"]
+        elif args.predict == "motion_without_surge": args.targets = ["Sway Velocity","Yaw Rate","Yaw Angle"]
         args.features_resolved = True # Flag to avoid re-resolving
 
     # 3. Extract Raw Sequences

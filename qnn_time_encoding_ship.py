@@ -169,7 +169,7 @@ if __name__=="__main__":
     parser.add_argument('-y', '--horizon', type=int, default=5) # 1,3,5
     
     # Target Options
-    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'motion'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
+    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'motion','motion_without_surge'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
     parser.add_argument('--norm', type = str2bool, default=True, choices = [True, False], help="Normalize targets to [-1, 1]") # Don't normalize NOTE maybe normalize for a classical layer that goes before the redout if we add 
     parser.add_argument('-rt', '--reconstruct_train', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
     parser.add_argument('-rv', '--reconstruct_val', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")

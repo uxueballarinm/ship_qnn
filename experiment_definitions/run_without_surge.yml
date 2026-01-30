@@ -1,0 +1,78 @@
+# ==============================================================================
+# EXPERIMENT 1: SPSA (Stochastic) - Optimized for Stability
+# Recreates the successful architecture for Sway/Yaw but uses SPSA.
+# ==============================================================================
+- window_size: 5
+  data: reduce_dataset
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: motion_without_surge # <--- Targets: Sway, YawRate, YawAngle
+  
+  optimizer: spsa
+  maxiter: 6000
+  batch_size: 64
+  learning_rate: [0.02, 0.001]
+  perturbation: 0.1
+  
+  # Weights for [Sway, YawRate, YawAngle]
+  weights: [1.0, 1.0, 1.0] 
+  run: [0]
+
+  heads_config:
+    # Head 1: Sway + Yaw Rate (Matches your successful log Head 2)
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+
+    # Head 2: Yaw Angle (Matches your successful log Head 3)
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1]
+
+# ==============================================================================
+# EXPERIMENT 2: COBYLA (Deterministic) - Optimized for Precision
+# Uses the exact same successful architecture with COBYLA.
+# ==============================================================================
+- window_size: 5
+  data: reduce_dataset
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  model: multihead
+  predict: motion_without_surge
+  
+  optimizer: cobyla
+  maxiter: 5000 # Matches your log's successful run length
+  tol: 0.0001
+  batch_size: 32 # COBYLA often benefits from slightly smaller batches or full batch
+  
+  # Unused by COBYLA but required by config loader
+  learning_rate: 0.01 
+  perturbation: 0.1
+  
+  weights: [1.0, 1.0, 1.0]
+  run: [0]
+
+  heads_config:
+    # Exact same architecture
+    - features: ['sv', 'yr', 'rarad']
+      output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+
+    - features: ['ya', 'yr']
+      output_dim: 1
+      reps: 1
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1]
