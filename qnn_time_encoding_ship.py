@@ -122,12 +122,6 @@ def run(args):
     # Training
     results = train_model(args, model, x_train, y_train, x_val, y_val, y_scaler)
 
-    # Plot Convergence with Dual Axes
-    short_args = map_names([args.ansatz, args.entangle], reverse=True)
-    fig_dir = f"figures/{timestamp}_{args.model}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{short_args[0]}_{short_args[1]}_r{args.reps}"
-    os.makedirs(fig_dir, exist_ok=True)
-    plot_convergence(args, results, filename=f"{fig_dir}/plot_convergence.png")
-
     # Evaluation
     print("\nEvaluating on Test Set...")
     
@@ -139,7 +133,14 @@ def run(args):
     print("...with final weights")
     final_eval = evaluate_model(args, model, results['final_weights'], x_test, y_test, x_scaler, y_scaler)
 
-    
+    scalers = [x_scaler, y_scaler]
+    model_dir = save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
+    load_experiment_results(model_dir)
+
+    fig_dir = model_dir.replace("models", "figures")[:-4]
+    os.makedirs(fig_dir, exist_ok=True)
+
+    plot_convergence(args, results, filename=f"{fig_dir}/plot_convergence.png")
     # Local plots
     plot_kinematics_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
     plot_kinematics_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
@@ -152,9 +153,8 @@ def run(args):
     plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_kinematics_closed.png")
     plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
     
-    scalers = [x_scaler, y_scaler]
-    model_dir = save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
-    load_experiment_results(model_dir)
+    
+    
 
 if __name__=="__main__":
 
