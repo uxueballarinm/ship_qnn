@@ -1711,15 +1711,20 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
     horizons = [min(h, max_h) for h in horizons]
     horizons.sort(reverse=True)
 
-    fig = plt.figure(figsize=(14, 10))
-    gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
+    num_targets = len(args.targets)
+    cols = 2
+    rows = math.ceil(num_targets / cols)
+    
+    fig = plt.figure(figsize=(7 * cols, 5 * rows))
+    gs = gridspec.GridSpec(rows, cols, hspace=0.3, wspace=0.25)
 
-    targets = [
-        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
-        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
-        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
-        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
-    ]
+    # Map standard units
+    unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
+    
+    targets = []
+    for i, t_name in enumerate(args.targets):
+        u = unit_map.get(t_name, "")
+        targets.append({"name": t_name, "unit": u, "idx": i})
     
     axes = []
     
@@ -1739,7 +1744,10 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
 
     # 2. Plot Branches
     num_samples = pred_path.shape[0]
-    color_branch = colors[1] if 'colors' in globals() and len(colors) > 1 else '#1f77b4'
+    if 'colors' in globals() and len(colors) > 0:
+        color_list = colors
+    else:
+        color_list = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
 
     for i in range(0, num_samples, step_interval):
         # Loop through requested horizons (e.g. 5, then 1)
@@ -1756,10 +1764,7 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
 
             # Pick color: Cycle through colors based on horizon index
             # If 'colors' exists globally use it, else fallback
-            if 'colors' in globals() and len(colors) > 0:
-                c = colors[(h_idx + 1) % len(colors)] 
-            else:
-                c = ['#1f77b4', '#ff7f0e', '#2ca02c'][h_idx % 3]
+            c = color_list[(h_idx + 1) % len(color_list)]
 
             # Plot on all 4 subplots
             for idx, ax in enumerate(axes):
@@ -1806,15 +1811,15 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], 
     raw_pred = data['global'][loop]['pred_path']
 
     # 2. Setup Figure
-    fig = plt.figure(figsize=(14, 10))
-    gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
+    num_targets = len(args.targets)
+    cols = 2
+    rows = math.ceil(num_targets / cols)
     
-    targets = [
-        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
-        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
-        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
-        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
-    ]
+    fig = plt.figure(figsize=(7*cols, 5*rows))
+    gs = gridspec.GridSpec(rows, cols, hspace=0.3, wspace=0.25)
+    
+    unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
+    targets = [{"name": t, "unit": unit_map.get(t, ""), "idx": i} for i, t in enumerate(args.targets)]
 
     # 3. Loop through the 4 targets and plot
     axes = []
@@ -1912,13 +1917,8 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
     true_path_flat = true_backbone[:num_points]         
     time_steps = np.arange(num_points)
 
-    # Define Targets
-    targets = [
-        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
-        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
-        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
-        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
-    ]
+    unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
+    targets = [{"name": t, "unit": unit_map.get(t, ""), "idx": i} for i, t in enumerate(args.targets)]
 
     # Ensure output directory exists (handles the 'compare_error' subfolder)
     if filename:
@@ -2056,17 +2056,15 @@ def plot_kinematics_boxplots(args, data, mode='global', loop='closed', filename=
     abs_error = np.abs(true_path[:num_samples] - pred_path[:num_samples])
     
     horizon_steps = abs_error.shape[1]
-    
+    num_targets = len(args.targets)
+    cols = 2
+    rows = math.ceil(num_targets / cols)
     # 2. Setup Figure (2x2 Grid)
-    fig = plt.figure(figsize=(14, 10))
-    gs = gridspec.GridSpec(2, 2, hspace=0.3, wspace=0.25)
+    fig = plt.figure(figsize=(7*cols, 5*rows))
+    gs = gridspec.GridSpec(rows, cols, hspace=0.3, wspace=0.25)
 
-    targets = [
-        {"name": "Surge Velocity", "unit": "m/s", "idx": 0},
-        {"name": "Sway Velocity",  "unit": "m/s", "idx": 1},
-        {"name": "Yaw Rate",       "unit": "rad/s", "idx": 2},
-        {"name": "Yaw Angle",      "unit": "rad", "idx": 3}
-    ]
+    unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
+    targets = [{"name": t, "unit": unit_map.get(t, ""), "idx": i} for i, t in enumerate(args.targets)]
 
     # 3. Loop through targets
     for i, tgt in enumerate(targets):
