@@ -35,7 +35,7 @@
       encoding: compact
       ansatz: realamplitudes
       entangle: full
-      map: [0, 1]
+      map: [0, 1,-1]
 
 # ==============================================================================
 # EXPERIMENT 2: COBYLA (Deterministic) - Optimized for Precision
@@ -75,4 +75,4 @@
       encoding: compact
       ansatz: realamplitudes
       entangle: full
-      map: [0, 1]
+      map: [0, 1,-1]
