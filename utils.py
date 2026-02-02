@@ -1263,7 +1263,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
 
     log_filename = "logs/experiment_log.txt"
-    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<15} {str(final_entangle):<14} reps={str(final_reps):<2} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
+    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<56} {str(final_entangle):<14} reps={str(final_reps):<15} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
     with open(log_filename, "a") as f: f.write(log_entry)
     
     print(f"\n[Logger] Model saved to {model_filename}")
