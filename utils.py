@@ -827,7 +827,7 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     # 1. Setup
     num_samples = x_test.shape[0]; horizon = args.horizon        
     num_targets = len(args.targets)
-    state_vars = ['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']
+    state_vars = args.targets#['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']
     direct_updates, physics_updates = [], []
     update_rules = {} 
     
@@ -925,8 +925,8 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
 
     results = {}
     orig_shape = y_test.shape # (N, H, T)
-    num_targets = orig_shape[-1]
-    target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
+    num_targets = orig_shape[-1] 
+    target_names = args.targets
     # ONE-STEP EVALUATION
     preds_norm_step = model.forward(x_test, params) 
     
