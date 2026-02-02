@@ -50,3 +50,8 @@ logs/
 ODDIT/
 
 mandar_gemini/
+
+reduce_dataset_cobyla/
+reduce_dataset/
+dataset/
+experiment_definitions/
