@@ -63,3 +63,5 @@ dataset/
 experiment_definitions/
 
 reduce_dataset_test_with_train/
+
+checking_splited_data/
