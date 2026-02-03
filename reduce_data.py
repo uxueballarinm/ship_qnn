@@ -5,26 +5,17 @@ import os
 def reduce_dataset(input_path, output_path=None, mode='total_points', value=1000, time_col='timestamp'):
     """
     Reduces a CSV/Excel dataset.
-    
-    Args:
-        input_path (str): Path to original file.
-        output_path (str): Path to save reduced file.
-        mode (str): 
-            - 'total_points': Downsamples to have exactly 'value' rows (evenly spaced).
-            - 'cutoff': Keeps only the first 'value' rows.
-            - 'time_interval': Keeps 1 point every 'value' seconds.
-        value (float/int): The parameter for the mode.
-        time_col (str): The name of the time column (required for time_interval).
     """
     
     # 1. Load Data
-    print(f"Loading: {input_path}...")
+    # print(f"Processing: {os.path.basename(input_path)}...", end=" ")
     if input_path.endswith('.csv'):
         df = pd.read_csv(input_path)
     elif input_path.endswith('.xlsx'):
         df = pd.read_excel(input_path)
     else:
-        raise ValueError("File must be .csv or .xlsx")
+        print(f"Skipping {input_path} (not .csv or .xlsx)")
+        return
         
     original_len = len(df)
     
@@ -33,7 +24,7 @@ def reduce_dataset(input_path, output_path=None, mode='total_points', value=1000
         # "Take first X points"
         limit = int(value)
         df_new = df.head(limit)
-        print(f"Mode: Cutoff (First {limit} rows)")
+        # print(f"-> Cutoff ({limit})")
 
     elif mode == 'total_points':
         # "Take X points spread evenly" (Stride)
@@ -41,10 +32,11 @@ def reduce_dataset(input_path, output_path=None, mode='total_points', value=1000
         if target_n >= original_len:
             df_new = df.copy()
         else:
-            step = original_len // target_n
+            # Calculate stride to get approximately target_n
+            step = max(1, original_len // target_n)
             df_new = df.iloc[::step, :]  # Take every nth row
-            df_new = df_new.head(target_n) # Ensure exact count
-        print(f"Mode: Total Points (Target: {target_n}, Stride: {step})")
+            df_new = df_new.head(target_n) # Ensure exact count if slight mismatch
+        # print(f"-> Total Points ({len(df_new)})")
 
     elif mode == 'time_interval':
         # "Take point every X seconds"
@@ -52,21 +44,19 @@ def reduce_dataset(input_path, output_path=None, mode='total_points', value=1000
         
         # Ensure time column exists
         if time_col not in df.columns:
-            raise ValueError(f"Column '{time_col}' not found. Available: {list(df.columns)}")
+            print(f"Error: Column '{time_col}' not found.")
+            return
         
         # Convert timestamp to datetime objects for resampling
-        # Assuming timestamp is in seconds (UNIX or relative float)
         temp_time = pd.to_datetime(df[time_col], unit='s')
         
-        # Set temp index, resample, and take the first valid value in that bin
         df_temp = df.copy()
         df_temp['temp_index'] = temp_time
         df_temp = df_temp.set_index('temp_index')
         
-        # Resample (e.g., '2S' for 2 seconds)
-        # .first() takes the actual data point at the start of the bin (no interpolation)
+        # Resample and take first valid value
         df_new = df_temp.resample(f'{seconds}S').first().dropna().reset_index(drop=True)
-        print(f"Mode: Time Interval (Every {seconds} seconds)")
+        # print(f"-> Interval ({seconds}s)")
 
     else:
         raise ValueError("Unknown mode. Use: 'total_points', 'cutoff', or 'time_interval'")
@@ -76,27 +66,74 @@ def reduce_dataset(input_path, output_path=None, mode='total_points', value=1000
         name, ext = os.path.splitext(input_path)
         output_path = f"{name}_reduced_{mode}_{value}{ext}"
         
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
     if input_path.endswith('.csv'):
         df_new.to_csv(output_path, index=False)
     else:
         df_new.to_excel(output_path, index=False)
         
-    print(f"Done! Reduced from {original_len} to {len(df_new)} rows.")
-    print(f"Saved to: {output_path}")
+    print(f"[{mode}] {os.path.basename(input_path)}: {original_len} -> {len(df_new)} rows. Saved.")
     
     return df_new
 
-# --- EXAMPLE USAGE ---
+def process_directory(input_dir, output_dir, mode, value, time_col='timestamp'):
+    """
+    Walks through input_dir, replicates structure in output_dir, and reduces files.
+    """
+    print(f"\n--- Starting Batch Processing ---")
+    print(f"Input:  {input_dir}")
+    print(f"Output: {output_dir}")
+    print(f"Mode:   {mode} = {value}")
+    print("-" * 30)
+
+    if not os.path.exists(input_dir):
+        print(f"Error: Input directory '{input_dir}' does not exist.")
+        return
+
+    count = 0
+    for root, dirs, files in os.walk(input_dir):
+        for file in files:
+            if file.endswith(('.csv', '.xlsx')):
+                # 1. Get full path of source
+                src_path = os.path.join(root, file)
+                
+                # 2. Compute relative path (e.g., 'train/file.csv')
+                rel_path = os.path.relpath(src_path, input_dir)
+                
+                # 3. Compute full path of destination
+                dest_path = os.path.join(output_dir, rel_path)
+                
+                # 4. Process
+                reduce_dataset(src_path, dest_path, mode=mode, value=value, time_col=time_col)
+                count += 1
+    
+    print("-" * 30)
+    print(f"Batch processing complete. Processed {count} files.")
+
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
     
-    # CHANGE THIS to your file path
-    file_path = "dataset/validation/zigzag_18_18_ind.csv"
+    # 1. CONFIGURATION
+    INPUT_FOLDER = "dataset"
+    OUTPUT_FOLDER = "reduce_row_number"
     
-    # # OPTION 1: Keep exactly 500 points (spread across the whole file)
-    # reduce_dataset(file_path, mode='total_points', value=500)
+    # Modes: 'total_points' (row count), 'time_interval' (seconds), 'cutoff' (first N)
+    REDUCTION_MODE = 'total_points' 
     
-    # OPTION 2: Take 1 point every 2.0 seconds
-    reduce_dataset(file_path, mode='time_interval', output_path="reduce_dataset_cobyla/validation/zigzag_18_18_ind_reduced_2_s.csv", value=2.0, time_col='Time (s)')
+    # If mode is 'total_points', this is the target number of rows per file.
+    # If mode is 'time_interval', this is the seconds between points.
+    TARGET_VALUE = 2000
     
-    # # OPTION 3: Just take the first 1000 rows
-    # reduce_dataset(file_path, mode='cutoff', value=1000)
+    # Only needed if using 'time_interval'
+    TIME_COLUMN = 'Time (s)' 
+
+    # 2. RUN BATCH PROCESS
+    process_directory(
+        input_dir=INPUT_FOLDER, 
+        output_dir=OUTPUT_FOLDER, 
+        mode=REDUCTION_MODE, 
+        value=TARGET_VALUE, 
+        time_col=TIME_COLUMN
+    )

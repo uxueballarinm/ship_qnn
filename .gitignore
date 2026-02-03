@@ -47,21 +47,14 @@ logs/
 /models
 .pkl
 
-ODDIT/
+data/
 
 mandar_gemini/
 
-reduce_dataset_cobyla/
 
 
-reduce_dataset/
-
-
-dataset/
 
 
 experiment_definitions/
 
-reduce_dataset_test_with_train/
 
-checking_splited_data/
