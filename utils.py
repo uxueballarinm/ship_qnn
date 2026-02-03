@@ -942,8 +942,9 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Step_R2'] = r2_score(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
 
     for i, name in enumerate(target_names):
-        results[f'{name}_Step_MSE'] = mean_squared_error(y_gt_real[..., i].flatten(), preds_real_step[..., i].flatten())
-        results[f'{name}_Step_R2']  = r2_score(y_gt_real[..., i].flatten(), preds_real_step[..., i].flatten())
+        clean_name = name.replace(" ", "_")
+        results[f'{clean_name}_Step_MSE'] = mean_squared_error(y_gt_real[..., i].flatten(), preds_real_step[..., i].flatten())
+        results[f'{clean_name}_Step_R2']  = r2_score(y_gt_real[..., i].flatten(), preds_real_step[..., i].flatten())
 
     if args.predict == 'delta':
         true_path_backbone = np.concatenate([np.zeros((1, num_targets)), np.cumsum(y_gt_real[:, 0, :], axis=0)])
@@ -961,10 +962,11 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Local_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_local.reshape(-1, num_targets))
     results['Local_ADE'] = np.mean(np.linalg.norm(true_path - pred_path_local, axis=2))
     for i, name in enumerate(target_names):
+        clean_name = name.replace(" ", "_")
         true_i = true_path[..., i].flatten()
         pred_i = pred_path_local[..., i].flatten()
-        results[f'{name}_Local_MSE'] = mean_squared_error(true_i, pred_i)
-        results[f'{name}_Local_ADE'] = np.mean(np.abs(true_path[..., i] - pred_path_local[..., i]))
+        results[f'{clean_name}_Local_MSE'] = mean_squared_error(true_i, pred_i)
+        results[f'{clean_name}_Local_ADE'] = np.mean(np.abs(true_path[..., i] - pred_path_local[..., i]))
 
     results['Global_open_MSE'] = mean_squared_error(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
     results['Global_open_R2'] = r2_score(true_path.reshape(-1, num_targets), pred_path_global_open.reshape(-1, num_targets))
@@ -974,16 +976,17 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Global_open_Max'] = np.max(norm_global_error)   
 
     for i, name in enumerate(target_names):
+        clean_name = name.replace(" ", "_")
         true_i = true_path[..., i].flatten()
         pred_i = pred_path_global_open[..., i].flatten()
         
         # Calculate Abs Error for Max logic
         abs_err = np.abs(true_path[..., i] - pred_path_global_open[..., i])
         
-        results[f'{name}_Global_open_MSE'] = mean_squared_error(true_i, pred_i)
-        results[f'{name}_Global_open_R2']  = r2_score(true_i, pred_i)
-        results[f'{name}_Global_open_ADE'] = np.mean(abs_err)    
-        results[f'{name}_Global_open_FDE'] = np.mean(abs_err[:, -1])
+        results[f'{clean_name}_Global_open_MSE'] = mean_squared_error(true_i, pred_i)
+        results[f'{clean_name}_Global_open_R2']  = r2_score(true_i, pred_i)
+        results[f'{clean_name}_Global_open_ADE'] = np.mean(abs_err)    
+        results[f'{clean_name}_Global_open_FDE'] = np.mean(abs_err[:, -1])
 
     # RECURSIVE EVALUATION (Updated Unpacking)
     preds_norm_rec, rec_ratio = recursive_forward_pass(args, model, params, x_test, x_scaler, y_scaler)
@@ -1009,15 +1012,16 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     results['Global_closed_FDE'] = np.mean(norm_global_error[:, -1])
     results['Global_closed_Max'] = np.max(norm_global_error)  
     for i, name in enumerate(target_names):
+        clean_name = name.replace(" ", "_")
         true_i = true_path[..., i].flatten()
         pred_i = pred_path_global[..., i].flatten()
         abs_err = np.abs(true_path[..., i] - pred_path_global[..., i])
         
         # Store individual metrics
-        results[f'{name}_Global_closed_MSE'] = mean_squared_error(true_i, pred_i)
-        results[f'{name}_Global_closed_R2']  =r2_score(true_i, pred_i)
-        results[f'{name}_Global_closed_ADE'] = np.mean(abs_err)    
-        results[f'{name}_Global_closed_FDE'] = np.mean(abs_err[:, -1])  
+        results[f'{clean_name}_Global_closed_MSE'] = mean_squared_error(true_i, pred_i)
+        results[f'{clean_name}_Global_closed_R2']  =r2_score(true_i, pred_i)
+        results[f'{clean_name}_Global_closed_ADE'] = np.mean(abs_err)    
+        results[f'{clean_name}_Global_closed_FDE'] = np.mean(abs_err[:, -1])  
 
 
     return {
@@ -1758,7 +1762,7 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
             if t_indices[-1] >= len(time_steps): continue
             
             # Get the branch data: Start at true[i], then append preds up to step h
-            curr_true = true_path[i].reshape(1, 4)
+            curr_true = true_path[i].reshape(1, -1)
             curr_pred = pred_path[i, :h, :] # Slice: take only first h steps
             branch_data = np.vstack([curr_true, curr_pred]) # (h+1, 4)
 
