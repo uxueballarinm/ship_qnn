@@ -116,15 +116,15 @@ def process_directory(input_dir, output_dir, mode, value, time_col='timestamp'):
 if __name__ == "__main__":
     
     # 1. CONFIGURATION
-    INPUT_FOLDER = "dataset"
-    OUTPUT_FOLDER = "reduce_row_number"
+    INPUT_FOLDER = "data\\dataset"
+    OUTPUT_FOLDER = "data\\reduce_row_number_2"
     
     # Modes: 'total_points' (row count), 'time_interval' (seconds), 'cutoff' (first N)
     REDUCTION_MODE = 'total_points' 
     
     # If mode is 'total_points', this is the target number of rows per file.
     # If mode is 'time_interval', this is the seconds between points.
-    TARGET_VALUE = 2000
+    TARGET_VALUE = 800
     
     # Only needed if using 'time_interval'
     TIME_COLUMN = 'Time (s)' 

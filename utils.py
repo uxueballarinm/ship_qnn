@@ -17,7 +17,7 @@ import matplotlib.font_manager as fm
 from matplotlib.lines import Line2D
 import matplotlib.cm as cm
 from matplotlib.lines import Line2D
-
+import qiskit_algorithms
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
@@ -46,7 +46,7 @@ C_RESET = '\033[0m'
 
 colors = ['#E60000', '#FF8C00', '#C71585', '#008080', '#1E90FF']
 #"Position X", "Position Y",
-full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)"]#, "OOD Label"]
+full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)", "Abs Sway", "Abs Rudder"]#, "OOD Label"]
 
 
 # ==============================================================================
@@ -70,6 +70,8 @@ def map_names(feature_list, reverse=False):
         "rarad": "Rudder Angle (rad)", "OOD": "OOD Label",
         "dwv":"delta Surge Velocity", "dsv":"delta Sway Velocity",
         "dyr":"delta Yaw Rate", "dya":"delta Yaw Angle",
+        "asv":"Abs Sway", "ararad":"Abs Rudder",
+        "dasv":"delta Abs Sway", "dararad":"delta Abs Rudder",
         # Ansatz
         "effsu2": "efficientsu2", "ugates": "ugates", "realamplitudes": "realamp",
         # Entanglement

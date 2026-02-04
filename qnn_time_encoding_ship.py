@@ -7,6 +7,7 @@ def run(args):
     seed = args.run
     random.seed(seed)
     np.random.seed(seed)
+    qiskit_algorithms.utils.algorithm_globals.random_seed = seed
 # 1. SETUP PATHS (Assume subfolders 'train', 'validation', 'test' inside args.data)
     print(f"\n[Data Loading] Root Directory: {args.data}")
     train_dir = os.path.join(args.data, "train")
