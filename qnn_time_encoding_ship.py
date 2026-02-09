@@ -36,6 +36,10 @@ def run(args):
     print(f"  Val:   X={x_val.shape},   Y={y_val.shape}")
     print(f"  Test:  X={x_test.shape},  Y={y_test.shape}")
 
+    total_samples = x_train.shape[0] + x_val.shape[0] + x_test.shape[0]
+    args.data_n = total_samples
+    args.data_dt = 4.5  # You can set this if you have a specific time resolution
+
     # Construct QNN
     if args.model == 'multihead':
         if not hasattr(args, 'heads_config') or not args.heads_config:

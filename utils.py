@@ -3,6 +3,7 @@ import pickle
 import argparse
 from copy import deepcopy
 import glob
+import json
 
 import time
 import datetime
@@ -1078,23 +1079,47 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     final_reps = getattr(args, 'reps', 'N/A')
     final_encoding = getattr(args, 'encoding', 'N/A')
     final_map = getattr(args, 'map', 'N/A')
-    final_features = map_names(args.features, reverse=True) 
+    final_features = map_names(args.features, reverse=True)
 
+    if getattr(args, 'model', 'vanilla') == 'multihead':
+        head_number = len(getattr(args, 'heads_config', []))
+    else:
+        head_number = 1
+    
     def resolve_multi_val(values_list):
         if not values_list: return 'N/A'
         if all(x == values_list[0] for x in values_list):
             return values_list[0] 
         return str(values_list)
-
+    heads_config_str = "N/A"
     if getattr(args, 'model', '') == 'multihead' and hasattr(args, 'heads_config') and args.heads_config:
-        list_ansatz, list_entangle, list_reps, list_encoding, list_map, list_features = [], [], [], [], [], []
+        list_ansatz, list_entangle, list_reps, list_encoding, list_map, list_features, clean_heads_list = [], [], [], [], [], [],[]
         for h in args.heads_config:
-            list_ansatz.append(map_names([h.get('ansatz', args.ansatz)], reverse=True)[0])
-            list_entangle.append(map_names([h.get('entangle', args.entangle)], reverse=True)[0])
-            list_reps.append(h.get('reps', getattr(args, 'reps', 'N/A')))
-            list_encoding.append(h.get('encoding', getattr(args, 'encoding', 'N/A')))
-            list_map.append(h.get('map', getattr(args, 'map', 'N/A')))
-            list_features.append(map_names(h.get('features', []), reverse=True))
+            a_val = map_names([h.get('ansatz', args.ansatz)], reverse=True)[0]
+            e_val = map_names([h.get('entangle', args.entangle)], reverse=True)[0]
+            r_val = h.get('reps', getattr(args, 'reps', 'N/A'))
+            enc_val = h.get('encoding', getattr(args, 'encoding', 'N/A'))
+            m_val = h.get('map', getattr(args, 'map', 'N/A'))
+            f_val = map_names(h.get('features', []), reverse=True)
+
+            list_ansatz.append(a_val)
+            list_entangle.append(e_val)
+            list_reps.append(r_val)
+            list_encoding.append(enc_val)
+            list_map.append(m_val)
+            list_features.append(f_val)
+
+            # Build a clean dictionary for this head
+            head_clean = {
+                'features': f_val,
+                'output_dim': h.get('output_dim', 'N/A'),
+                'reps': r_val,
+                'encoding': enc_val,
+                'ansatz': a_val,
+                'entangle': e_val,
+                'map': m_val
+            }
+            clean_heads_list.append(head_clean)
 
         final_ansatz = resolve_multi_val(list_ansatz)
         final_entangle = resolve_multi_val(list_entangle)
@@ -1102,7 +1127,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         final_encoding = resolve_multi_val(list_encoding)
         final_map = resolve_multi_val(list_map)
         final_features = resolve_multi_val(list_features)
-
+        heads_config_str = str(clean_heads_list)
     # ==========================================================================
     # 3. SAVE PICKLE
     # ==========================================================================
@@ -1160,7 +1185,8 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     raw_data['model_id'] = os.path.basename(model_filename)
     raw_data['data_n'] = getattr(args, 'data_n', 'N/A')
     raw_data['data_dt'] = getattr(args, 'data_dt', 'N/A')
-    raw_data['heads_config'] = str(getattr(args, 'heads_config', 'N/A'))
+    raw_data['head_number'] = head_number
+    raw_data['heads_config'] = heads_config_str
 
     metric_map = {
         "step MSE": m_final.get('Step_MSE'),
@@ -1203,7 +1229,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     final_column_order = [
         "date", "model_id", "run", "data", "data_n", "data_dt", 
         "features", "targets", "window_size", "horizon", "predict", "norm", 
-        "reconstruct_train", "reconstruct_val", "model", "encoding", "ansatz", 
+        "reconstruct_train", "reconstruct_val", "model", "head_number", "heads_config", "encoding", "ansatz", 
         "entangle", "reps", "map", "reorder", "total params", "q params", 
         "c params", "optimizer", "maxiter", "iterations", "final val loss", 
         "tolerance", "batch_size", "learning_rate", "perturbation", "step MSE", "step R2", 
