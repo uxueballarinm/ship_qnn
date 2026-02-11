@@ -1295,7 +1295,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
 
     log_filename = "logs/experiment_log.txt"
-    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<56} {str(final_entangle):<14} reps={str(final_reps):<15} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
+    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<56} {str(final_entangle):<36} reps={str(final_reps):<15} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
     with open(log_filename, "a") as f: f.write(log_entry)
     
     print(f"\n[Logger] Model saved to {model_filename}")
@@ -1575,13 +1575,15 @@ def load_experiment_results(filepath, final = True):
         print(header_str)
         print("-" * len(header_str))
 
-        target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
-        
-        for tgt in target_names:
+        base_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]        
+        for tgt in base_names:
             # Helper to safely get metric for this specific target
             def t_get(metric_suffix):
                 key = f"{tgt}_{metric_suffix}"
                 val = m_final.get(key)
+                if val is None:
+                    key2 = f"delta_{tgt}_{metric_suffix}"
+                    val = m_final.get(key2)
                 if val is None: return "N/A"
                 return f"{val:.5f}" if isinstance(val, (int, float)) else str(val)
 
