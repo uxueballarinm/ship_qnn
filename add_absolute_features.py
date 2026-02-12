@@ -60,9 +60,9 @@ def add_features(input_dir, output_dir):
 
 if __name__ == "__main__":
     # 1. The folder where your data is NOW (The 800-row version)
-    INPUT_FOLDER = "data/reduce_row_number_2"
+    INPUT_FOLDER = "data/Waypoint_reduced"
     
     # 2. The NEW folder where you want the result
-    OUTPUT_FOLDER = "data/reduce_row_number_absolutes"
+    OUTPUT_FOLDER = "data/Waypoint_reduced_absolute"
     
     add_features(INPUT_FOLDER, OUTPUT_FOLDER)

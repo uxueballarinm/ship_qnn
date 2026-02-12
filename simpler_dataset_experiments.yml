@@ -1,62 +1,94 @@
 - model: 'multihead'
-  data: "Waypoint_reduced"
-  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  data: "Waypoint_reduced_absolute"
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad', 'asv', 'ararad']
   optimizer: 'spsa'
   learning_rate: [0.05, 0.001]
   batch_size: 256
   maxiter: 4000
   encoding: 'compact'
-  heads_config:
-    - features: ['wv', 'rarad']
-      ansatz: 'effsu2'
-      reps: 3
-      entangle: 'full'
-      output_dim: 1
-    - features: ['sv', 'yr', 'rarad']
-      ansatz: 'effsu2'
-      reps: 5
-      entangle: 'full'
-      output_dim: 2
-    - features: ['ya', 'rarad']
-      ansatz: 'realamplitudes'
-      reps: 2
-      entangle: 'full'
-      output_dim: 1
-- model: 'multihead'
-  data: "Waypoint_reduced"
-  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
-  optimizer: 'spsa'
-  learning_rate: [0.02, 0.001]
-  batch_size: 128
-  maxiter: 3000
-  encoding: 'compact'
+  initialization: identity
+  run: [0, 1, 2]
   heads_config:
     - features: ['wv', 'sv', 'rarad']
-      ansatz: 'effsu2'
-      reps: 2
-      entangle: 'full'
       output_dim: 2
-    - features: ['yr', 'ya', 'rarad']
-      ansatz: 'realamplitudes'
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['yr', 'asv', 'ararad']
+      output_dim: 1
+      reps: 5
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['ya', 'yr', 'rarad']
+      output_dim: 1
       reps: 2
-      entangle: 'full'
-      output_dim: 2
-
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, 2]
 - model: 'multihead'
-  data: "Waypoint_reduced"
-  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  data: "Waypoint_reduced_absolute"
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad', 'asv', 'ararad']
   optimizer: 'spsa'
   learning_rate: [0.05, 0.001]
   batch_size: 256
   encoding: 'compact'
+  initialization: identity
+  run: [0, 1, 2]
   heads_config:
     - features: ['wv', 'sv', 'rarad']
-      ansatz: 'effsu2'
-      reps: 3
-      entangle: 'linear'
       output_dim: 2
-    - features: ['yr', 'ya', 'rarad']
-      ansatz: 'realamplitudes'
       reps: 3
-      entangle: 'full'
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: linear
+      map: [0, 1, 2]
+    - features: ['yr', 'asv', 'ararad']
+      output_dim: 1
+      reps: 5
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: linear
+      map: [0, 1, 2]
+    - features: ['ya', 'yr', 'rarad']
+      output_dim: 1
+      reps: 2
+      encoding: compact
+      ansatz: realamplitudes
+      entangle: full
+      map: [0, 1, 2]
+- model: 'multihead'
+  data: "Waypoint_reduced_absolute"
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad', 'asv', 'ararad']
+  optimizer: 'spsa'
+  learning_rate: [0.05, 0.001]
+  batch_size: 256
+  encoding: 'compact'
+  initialization: identity
+  run: [0, 1, 2]
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
       output_dim: 2
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['yr', 'asv', 'ararad']
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
+    - features: ['ya', 'yr', 'rarad']
+      output_dim: 1
+      reps: 3
+      encoding: compact
+      ansatz: efficientsu2
+      entangle: full
+      map: [0, 1, 2]
