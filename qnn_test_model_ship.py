@@ -9,7 +9,7 @@ def run_test(cli_args):
 
     model_path = cli_args.model
     data_path = cli_args.data
-    use_final_weights = cli_args.final
+    force_final = cli_args.final
     show_plot_flag = cli_args.show_plot
     save_plot_flag = cli_args.save_plot
 
@@ -28,7 +28,21 @@ def run_test(cli_args):
     
     x_scaler = saved_data['x_scaler'] 
     y_scaler = saved_data['y_scaler'] 
-    weights = saved_data['final_weights'] if use_final_weights else saved_data['best_weights']
+    if force_final:
+        # User explicitly asked for final weights (e.g. for debugging)
+        print("[Info] Forcing usage of FINAL weights (User Request).")
+        weights = saved_data.get('final_weights')
+    
+    elif 'selected_weights' in saved_data:
+        # PERFECT CASE: Use the weights that WON the validation comparison during training
+        method = saved_data.get('weight_selection_method', 'Unknown')
+        print(f"[Info] Using automatically SELECTED weights (Method: {method})")
+        weights = saved_data['selected_weights']
+        
+    else:
+        # FALLBACK (Old models): Default to 'best_weights' (Lowest Validation Loss)
+        print("[Warning] 'selected_weights' not found (Old Model). Falling back to 'best_weights'.")
+        weights = saved_data.get('best_weights', saved_data.get('final_weights'))
     
     print(f"Loaded Config: Model={args.model}, F={len(args.features)}, W={args.window_size}, H={args.horizon}")
 

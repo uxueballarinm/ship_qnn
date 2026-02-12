@@ -1052,15 +1052,17 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
 # ==============================================================================
 # SAVE AND PLOT RESULTS
 # ==============================================================================
-def save_experiment_results(args, train_results, best_eval, final_eval, scalers, qnn_dict, timestamp):
-    
+def save_experiment_results(args, train_results, val_eval, test_eval, scalers, qnn_dict, timestamp, selection_type="Unknown", excel_path=None):
+    if excel_path is None:
+        excel_filename = os.path.join("logs", "experiments_summary.xlsx")
+    else:
+        excel_filename = excel_path
     for folder in ["models", "logs", "figures"]: os.makedirs(folder, exist_ok=True)
-    
+    final_w = train_results.get('selected_weights', train_results['final_weights'])
     # ==========================================================================
     # 1. ROBUST PARAMETER COUNTING (Prevents Crash on Multi-Head)
     # ==========================================================================
-    total_params = len(train_results['final_weights'])
-    
+    total_params = len(final_w)    
     # Handle qnn_dict being a list (MultiHead) or dict (Vanilla)
     num_q_params = 0
     if isinstance(qnn_dict, list):
@@ -1143,12 +1145,12 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     
     save_payload = {
         "config": vars(args),
-        "best_weights": train_results['best_weights'],
-        "final_weights": train_results['final_weights'],
+        "selected_weights": final_w,
+        "weight_selection_method": selection_type,
         "train_history": train_results['train_history'],
         "val_history": train_results['val_history'],
-        "best_eval_metrics": best_eval['metrics'],
-        "final_eval_metrics": final_eval['metrics'],
+        "val_metrics": val_eval['metrics'],
+        "test_metrics": test_eval['metrics'],
         "y_scaler": scalers[1], "x_scaler": scalers[0], "qnn_structure": qnn_dict
     }
     with open(model_filename, "wb") as f: pickle.dump(save_payload, f)
@@ -1156,8 +1158,8 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     # ==========================================================================
     # 4. PREPARE EXCEL DATA (Strict Column Order)
     # ==========================================================================
-    excel_filename = os.path.join("logs", "experiments_summary.xlsx")
-    m_final = final_eval['metrics']
+    m_val = val_eval['metrics']
+    m_test = test_eval['metrics']
     
     try: dt_object = datetime.datetime.strptime(timestamp, "%m-%d_%H-%M-%S").replace(year=2026)
     except ValueError: dt_object = timestamp 
@@ -1185,23 +1187,30 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     raw_data['model_id'] = os.path.basename(model_filename)
     raw_data['data_n'] = getattr(args, 'data_n', 'N/A')
     raw_data['data_dt'] = getattr(args, 'data_dt', 'N/A')
+    raw_data['weight_selection'] = selection_type
     raw_data['head_number'] = head_number
     raw_data['heads_config'] = heads_config_str
-
+    val_keys_map = {
+        'Global_open_MSE': 'Val Global Open MSE',
+        'Global_open_R2': 'Val Global Open R2',
+        'Global_closed_R2': 'Val Global Closed R2'
+    }
+    for k, v in val_keys_map.items():
+        raw_data[v] = m_val.get(k)
     metric_map = {
-        "step MSE": m_final.get('Step_MSE'),
-        "step R2": m_final.get('Step_R2'),
-        "local MSE": m_final.get('Local_MSE'),
-        "local ADE": m_final.get('Local_ADE'),
-        "global open MSE": m_final.get('Global_open_MSE'),
-        "global open ADE": m_final.get('Global_open_ADE'),
-        "global open FDE": m_final.get('Global_open_FDE'),
-        "global open R2": m_final.get('Global_open_R2'),
-        "global closed MSE": m_final.get('Global_closed_MSE'),
-        "global closed ADE": m_final.get('Global_closed_ADE'),
-        "global closed FDE": m_final.get('Global_closed_FDE'),
-        "global closed R2": m_final.get('Global_closed_R2'),
-        "recursivity": m_final.get('Recursivity'),
+        "step MSE": m_test.get('Step_MSE'),
+        "step R2": m_test.get('Step_R2'),
+        "local MSE": m_test.get('Local_MSE'),
+        "local ADE": m_test.get('Local_ADE'),
+        "global open MSE": m_test.get('Global_open_MSE'),
+        "global open ADE": m_test.get('Global_open_ADE'),
+        "global open FDE": m_test.get('Global_open_FDE'),
+        "global open R2": m_test.get('Global_open_R2'),
+        "global closed MSE": m_test.get('Global_closed_MSE'),
+        "global closed ADE": m_test.get('Global_closed_ADE'),
+        "global closed FDE": m_test.get('Global_closed_FDE'),
+        "global closed R2": m_test.get('Global_closed_R2'),
+        "recursivity": m_test.get('Recursivity'),
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "iterations": len(train_results['train_history']),
         "total params": total_params,
@@ -1222,17 +1231,19 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
             m_under = m_suffix.replace(" ", "_")
             key_in_metrics = f"{tgt_under}_{m_under}"
             col_name_excel = f"{tgt_space} {m_suffix}"
-            if key_in_metrics in m_final:
-                raw_data[col_name_excel] = m_final[key_in_metrics]
+            if key_in_metrics in m_test:
+                raw_data[col_name_excel] = m_test[key_in_metrics]
 
     # E. Build Final Column List (User Defined Order)
     final_column_order = [
-        "date", "model_id", "run", "data", "data_n", "data_dt", 
+        "date", "model_id", "run", "weight_selection","data", "data_n", "data_dt", 
         "features", "targets", "window_size", "horizon", "predict", "norm", 
-        "reconstruct_train", "reconstruct_val", "model", "head_number", "heads_config", "encoding", "ansatz", 
-        "entangle", "reps", "map", "reorder", "total params", "q params", 
-        "c params", "optimizer", "maxiter", "iterations", "final val loss", 
-        "tolerance", "batch_size", "learning_rate", "perturbation", "step MSE", "step R2", 
+        "reconstruct_train", "reconstruct_val", "model", "heads_config",  "head_number","encoding", "ansatz", 
+        "entangle", "reps", "map", "reorder", 
+        "optimizer", "maxiter","iterations",  "tolerance", "batch_size", "learning_rate", "perturbation", 
+        "total params", "q params", "c params","final val loss", 
+        "Val Global Open MSE", "Val Global Open R2", "Val Global Closed R2",
+        "step MSE", "step R2", 
         "local MSE", "local ADE", "global open MSE", "global open ADE", 
         "global open FDE", "global open R2", "global closed MSE", 
         "global closed ADE", "global closed FDE", "global closed R2", 
@@ -1243,10 +1254,7 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
     for tgt in target_names:
         for m in metric_suffixes:
             final_column_order.append(f"{tgt} {m}")
-            
-    # Append heads_config at the end as requested
-    final_column_order.append("heads_config")
-
+    
     # Construct Row
     ordered_row = {}
     for col in final_column_order:
@@ -1295,24 +1303,26 @@ def save_experiment_results(args, train_results, best_eval, final_eval, scalers,
         df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
 
     log_filename = "logs/experiment_log.txt"
-    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<56} {str(final_entangle):<36} reps={str(final_reps):<15} | MSE={m_final.get('Step_MSE', 0):.4f}\n"
+    log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<56} {str(final_entangle):<36} reps={str(final_reps):<15} | MSE={m_test.get('Step_MSE', 0):.4f}\n"
     with open(log_filename, "a") as f: f.write(log_entry)
     
     print(f"\n[Logger] Model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
     return model_filename
-def save_classical_results(args, train_results, best_eval, final_eval, scalers, timestamp):
+def save_classical_results(args, train_results, val_eval, test_eval, scalers, timestamp, selection_type="Unknown", excel_path = None):
     """
     Saves detailed results specifically for Classical Models (LSTM/RNN).
     Saves to: logs/classical_experiments_summary.xlsx
     """
+    if excel_path is None:
+        excel_filename = "logs/classical_experiments_summary.xlsx"
+    else:
+        excel_filename = excel_path
     # 1. Create Folders
     for folder in ["models", "logs", "figures"]:
         os.makedirs(folder, exist_ok=True)
-
-    state_dict = train_results['final_weights']
-    total_params = sum(p.numel() for p in state_dict.values())
-
+    selected_w = train_results.get('selected_weights', train_results['final_weights'])
+    total_params = sum(p.numel() for p in selected_w.values())
     # 2. Save Model (Pickle)
     model_filename = f"models/{timestamp}_classical_adam_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl"
     
@@ -1320,10 +1330,12 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         "config": vars(args),
         "best_weights": train_results['best_weights'],
         "final_weights": train_results['final_weights'],
+        "selected_weights": selected_w,
+        "weight_selection_method": selection_type,
         "train_history": train_results['train_history'],
         "val_history": train_results['val_history'],
-        "best_eval_metrics": best_eval['metrics'],
-        "final_eval_metrics": final_eval['metrics'],
+        "val_metrics": val_eval['metrics'],    # Winner's validation metrics
+        "test_metrics": test_eval['metrics'],  # Winner's test metrics
         "y_scaler": scalers[1],
         "x_scaler": scalers[0]
     }
@@ -1332,32 +1344,28 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         pickle.dump(save_payload, f)
 
     # 3. Save Summary to Excel
-    excel_filename = "logs/classical_experiments_summary.xlsx"
-    m_final = final_eval['metrics']
-    
+    m_val, m_test = val_eval['metrics'], test_eval['metrics']
     # Timestamp to date format (Default 2026)
     try:
         dt_temp = datetime.datetime.strptime(timestamp, "%m-%d_%H-%M-%S")
         dt_object = dt_temp.replace(year=2026)
     except ValueError:
-        dt_object = timestamp 
-    ignore_keys = [
-        'select_features', 'drop_features', 
-        'save_plot', 'show_plot',
-    ]
+        dt_object = timestamp
+
+    ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot']
+
     def clean_val(v):
         if isinstance(v, bool): return str(v).lower()
         if isinstance(v, list): return str(v)
         return v
+
     def normalize_loaded_bools(val):
-        # If pandas loaded it as a real boolean
-        if isinstance(val, bool):
-            return str(val).lower()
-        # If pandas loaded it as a string but it's "VERDADERO" or "TRUE"
+        if isinstance(val, bool): return str(val).lower()
         if isinstance(val, str):
             if val.upper() in ['TRUE', 'VERDADERO']: return 'true'
             if val.upper() in ['FALSE', 'FALSO']: return 'false'
         return val
+    
     raw_data = {}
     for key, value in vars(args).items():
         if key not in ignore_keys:
@@ -1366,88 +1374,80 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
                 raw_data[key] = clean_val(short_list)
             else:
                 raw_data[key] = clean_val(value)
+
     metrics_flat = {
-        "step MSE": m_final.get('Step_MSE'),
-        "step R2": m_final.get('Step_R2'),
+        "date": dt_object,
+        "model_id": model_filename.split('/')[-1],
+        "model": "classical_lstm",
+        "weight_selection": selection_type,
+        
+        # --- NEW VALIDATION COLUMNS ---
+        "Val Global Open MSE": m_val.get('Global_open_MSE'),
+        "Val Global Open R2": m_val.get('Global_open_R2'),
+        "Val Global Closed R2": m_val.get('Global_closed_R2'),
 
-        "local MSE": m_final.get('Local_MSE'),
-        "local ADE": m_final.get('Local_ADE'),
-
-        "global open MSE": m_final.get('Global_open_MSE'),
-        "global open R2": m_final.get('Global_open_R2'),
-        "global open ADE": m_final.get('Global_open_ADE'),
-        "global open FDE": m_final.get('Global_open_FDE'),
-        "global closed MSE": m_final.get('Global_closed_MSE'),
-        "global closed R2": m_final.get('Global_closed_R2'),
-        "global closed ADE": m_final.get('Global_closed_ADE'),
-        "global closed FDE": m_final.get('Global_closed_FDE'),
-
+        # --- TEST COLUMNS ---
+        "step MSE": m_test.get('Step_MSE'),
+        "step R2": m_test.get('Step_R2'),
+        "local MSE": m_test.get('Local_MSE'),
+        "local ADE": m_test.get('Local_ADE'),
+        "global open MSE": m_test.get('Global_open_MSE'),
+        "global open R2": m_test.get('Global_open_R2'),
+        "global open ADE": m_test.get('Global_open_ADE'),
+        "global open FDE": m_test.get('Global_open_FDE'),
+        "global closed MSE": m_test.get('Global_closed_MSE'),
+        "global closed R2": m_test.get('Global_closed_R2'),
+        "global closed ADE": m_test.get('Global_closed_ADE'),
+        "global closed FDE": m_test.get('Global_closed_FDE'),
         
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "total params": total_params,
-        "iterations": len(train_results['train_history']),
-        "date": dt_object,
-        "model_id": model_filename.split('/')[-1],
-        "model": "classical_lstm" # Explicitly naming the architecture
+        "iterations": len(train_results['train_history'])
     }
     raw_data.update(metrics_flat)
 
     target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
     metric_types = [
-        "Step_MSE", "Step_R2",
-        "Local_MSE", "Local_ADE",
-        # Added ADE and FDE here to match your evaluate_model updates
+        "Step_MSE", "Step_R2", "Local_MSE", "Local_ADE",
         "Global_open_MSE", "Global_open_R2", "Global_open_ADE", "Global_open_FDE",
         "Global_closed_MSE", "Global_closed_R2", "Global_closed_ADE", "Global_closed_FDE"
     ]
-    per_target_cols = []
     
+    per_target_cols = []
     for tgt in target_names:
         for m_type in metric_types:
-            key_in_dict = f"{tgt}_{m_type}" # e.g. Surge_Velocity_Global_closed_RMSE
-            
-            if key_in_dict in m_final:
-                # Clean up name for Excel (Surge Velocity Global closed RMSE)
+            key_in_dict = f"{tgt}_{m_type}"
+            if key_in_dict in m_test:
                 col_name = key_in_dict.replace("_", " ") 
-                raw_data[col_name] = m_final[key_in_dict]
+                raw_data[col_name] = m_test[key_in_dict]
                 per_target_cols.append(col_name)
         
     column_order = [
-        # 1. ID & Meta
-        "date", "model_id", "run",
-        
-        # 2. Dataset Info
+        "date", "model_id", "run", "weight_selection",
         "data", "data_n", "data_dt", 
         "features", "targets", "window_size", "horizon", 
         "predict", "norm", "reconstruct_train", "reconstruct_val",
-        
-        # 3. Model Architecture (Classical Specific)
-        "model", "hidden_size", "layers", 
-        
-        # 4. Complexity
-        "total params",
-        
-        # 5. Training Config
+        "model", "hidden_size", "layers", "total params",
         "optimizer", "maxiter", "learning_rate", "batch_size", "patience", "iterations", "final val loss",
         
-        # 6. Key Metrics
-        "step MSE", "step R2",
-        "local MSE", "local ADE",
+        # VALIDATION METRICS
+        "Val Global Open MSE", "Val Global Open R2", "Val Global Closed R2",
+
+        # TEST METRICS
+        "step MSE", "step R2", "local MSE", "local ADE",
         "global open MSE", "global open ADE", "global open FDE", "global open R2", 
         "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
     ]
     final_column_order = column_order + per_target_cols
-    # Construct the final ordered dictionary
+
     ordered_row = {}
-    
-    # Add ordered keys first
     for col in final_column_order:
         if col in raw_data:
             ordered_row[col] = raw_data.pop(col) 
             
-    # Add whatever is left at the end
     for k, v in raw_data.items():
         ordered_row[k] = v
+
     df_new = pd.DataFrame([ordered_row])
 
     if os.path.exists(excel_filename):
@@ -1471,7 +1471,7 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         f"[{timestamp}] "
         f"{'classical':<10} | "
         f"F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | "
-        f"Hidden Size: {hidden:<45} | " # Padding ~48 chars to match the QNN 'Circuit' block width
+        f"Hidden Size: {hidden:<45} | " 
         f"Features: {short_feats} \n"
     )
     with open(log_filename, "a") as f:
@@ -1479,7 +1479,8 @@ def save_classical_results(args, train_results, best_eval, final_eval, scalers, 
         
     print(f"\n[Logger] Classical model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
-    
+    return model_filename
+
 def load_experiment_results(filepath, final = True):
     """
     Loads a saved experiment pickle file and prints a comprehensive summary,
@@ -1495,8 +1496,11 @@ def load_experiment_results(filepath, final = True):
         
     config = data.get('config', {})
     # m_best = data.get('best_eval_metrics', {})
-    m_final = data.get('final_eval_metrics', {}) if final == True else data.get('best_eval_metrics', {}) # We report final weights metrics
-    
+    if 'test_metrics' in data:
+        m_final = data['test_metrics']
+    else:
+        # Fallback for older files
+        m_final = data.get('final_eval_metrics', data.get('best_eval_metrics', {}))
     # Model type detection fallback
     if config.get('model') is None:
         if 'classical' in filepath.lower() or 'hidden_size' in config:
@@ -1516,7 +1520,8 @@ def load_experiment_results(filepath, final = True):
         timestamp = "Unknown"
         
     print(f"Timestamp: {timestamp}")
-    
+    selection_method = data.get('weight_selection_method', 'Unknown')
+    print(f"Weights Selected: {selection_method}")
     # --- Configuration ---
     print("\n--- Configuration ---")
     common_keys = ['model', 'features', 'window_size', 'horizon', 'optimizer']

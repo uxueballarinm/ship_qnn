@@ -16,7 +16,7 @@ except ImportError:
 # These values will be used if parameters are missing in the YAML
 DEFAULTS = {
     # Data & Task
-    'data': "datasets\zigzag_11_11_ind_reduced_2_s.csv",
+    'data': "data/reduce_row_number_absolutes",
     'select_features': ['wv','sv','yr','ya','rarad'],
     'drop_features': None,   
     'window_size': 5,
@@ -26,6 +26,7 @@ DEFAULTS = {
     'norm': True,
     'reconstruct_train': False,
     'reconstruct_val': False, 
+    'weights': "[1.0, 1.0, 1.0, 1.0]",
     
     # Classical Hyperparameters
     'model': 'classical',

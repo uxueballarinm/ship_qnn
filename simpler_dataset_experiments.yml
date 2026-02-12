@@ -1,0 +1,62 @@
+- model: 'multihead'
+  data: "simpler_dataset_path"
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  optimizer: 'spsa'
+  learning_rate: [0.05, 0.001]
+  batch_size: 256
+  maxiter: 4000
+  encoding: 'compact'
+  heads_config:
+    - features: ['wv', 'rarad']
+      ansatz: 'effsu2'
+      reps: 3
+      entangle: 'full'
+      output_dim: 1
+    - features: ['sv', 'yr', 'rarad']
+      ansatz: 'effsu2'
+      reps: 5
+      entangle: 'full'
+      output_dim: 2
+    - features: ['ya', 'rarad']
+      ansatz: 'realamplitudes'
+      reps: 2
+      entangle: 'full'
+      output_dim: 1
+- model: 'multihead'
+  data: "simpler_dataset_path"
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  optimizer: 'spsa'
+  learning_rate: [0.02, 0.001]
+  batch_size: 128
+  maxiter: 3000
+  encoding: 'compact'
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
+      ansatz: 'effsu2'
+      reps: 2
+      entangle: 'full'
+      output_dim: 2
+    - features: ['yr', 'ya', 'rarad']
+      ansatz: 'realamplitudes'
+      reps: 2
+      entangle: 'full'
+      output_dim: 2
+
+- model: 'multihead'
+  data: "simpler_dataset_path"
+  select_features: ['wv', 'sv', 'yr', 'ya', 'rarad']
+  optimizer: 'spsa'
+  learning_rate: [0.05, 0.001]
+  batch_size: 256
+  encoding: 'compact'
+  heads_config:
+    - features: ['wv', 'sv', 'rarad']
+      ansatz: 'effsu2'
+      reps: 3
+      entangle: 'linear'
+      output_dim: 2
+    - features: ['yr', 'ya', 'rarad']
+      ansatz: 'realamplitudes'
+      reps: 3
+      entangle: 'full'
+      output_dim: 2

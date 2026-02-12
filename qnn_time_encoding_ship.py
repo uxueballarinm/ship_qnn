@@ -8,7 +8,7 @@ def run(args):
     random.seed(seed)
     np.random.seed(seed)
     qiskit_algorithms.utils.algorithm_globals.random_seed = seed
-# 1. SETUP PATHS (Assume subfolders 'train', 'validation', 'test' inside args.data)
+    # 1. SETUP PATHS (Assume subfolders 'train', 'validation', 'test' inside args.data)
     print(f"\n[Data Loading] Root Directory: {args.data}")
     train_dir = os.path.join(args.data, "train")
     val_dir = os.path.join(args.data, "validation")
@@ -124,39 +124,59 @@ def run(args):
         # Instantiate model
         model = WindowEncodingQNN(estimator_qnn, y_train.shape, seed)
         qnn_dict = {'input_params': input_params, 'weight_params': weight_params, 'qc': qc}
-    # Training
+    
+
     results = train_model(args, model, x_train, y_train, x_val, y_val, y_scaler)
 
     # Evaluation
-    print("\nEvaluating on Test Set...")
+    print("\n[Model Selection] Comparing 'Best' vs 'Final' weights on VALIDATION set...")
     
-    # --- BEST WEIGHTS ---
-    print("...with best weights")
-    best_eval = evaluate_model(args, model, results['best_weights'], x_test, y_test, x_scaler, y_scaler)
+    # Evaluate Best Weights (saved during training when Val Loss was lowest)
+    val_eval_best = evaluate_model(args, model, results['best_weights'], x_val, y_val, x_scaler, y_scaler)
+    
+    # Evaluate Final Weights (last iteration)
+    val_eval_final = evaluate_model(args, model, results['final_weights'], x_val, y_val, x_scaler, y_scaler)
+    
+    metric_key = 'Global_open_MSE'
+    score_best = val_eval_best['metrics'][metric_key]
+    score_final = val_eval_final['metrics'][metric_key]
+    print(f"  > Validation {metric_key}: Best Weights={score_best:.5f} | Final Weights={score_final:.5f}")
 
-    # --- FINAL WEIGHTS ---
-    print("...with final weights")
-    final_eval = evaluate_model(args, model, results['final_weights'], x_test, y_test, x_scaler, y_scaler)
+    if score_best < score_final:
+        selected_weights_type = "Best (Lowest Val Loss)"
+        selected_weights = results['best_weights']
+        selected_val_metrics = val_eval_best
+        print(f"  > Selected: BEST weights")
+    else:
+        selected_weights_type = "Final (Last Iteration)"
+        selected_weights = results['final_weights']
+        selected_val_metrics = val_eval_final
+        print(f"  > Selected: FINAL weights")
+    
+    print("\n[Testing] Evaluating SELECTED weights on TEST set...")
+    test_eval = evaluate_model(args, model, selected_weights, x_test, y_test, x_scaler, y_scaler)
+    results['selected_weights'] = selected_weights
 
     scalers = [x_scaler, y_scaler]
-    model_dir = save_experiment_results(args, results, best_eval, final_eval, scalers, qnn_dict, timestamp)
-    load_experiment_results(model_dir)
 
-    fig_dir = model_dir.replace("models", "figures")[:-4]
-    os.makedirs(fig_dir, exist_ok=True)
+    saved_file = save_experiment_results(args, results, selected_val_metrics, test_eval, scalers, qnn_dict, timestamp, selection_type=selected_weights_type)
+    load_experiment_results(saved_file)
+    if args.save_plot or args.show_plot:
+        fig_dir = saved_file.replace("models", "figures")[:-4]
+        os.makedirs(fig_dir, exist_ok=True)
 
-    plot_convergence(args, results, filename=f"{fig_dir}/plot_convergence.png")
-    # Local plots
-    plot_kinematics_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
-    plot_kinematics_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
+        plot_convergence(args, results, filename=f"{fig_dir}/plot_convergence.png")
+        # Local plots
+        plot_kinematics_branches(args, test_eval, filename=f"{fig_dir}/plot_branches_local.png")
+        plot_kinematics_boxplots(args, test_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
 
-    # Global Open Plots
-    plot_kinematics_time_series(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_kinematics_open.png")
-    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
+        # Global Open Plots
+        plot_kinematics_time_series(args, test_eval, loop = 'open', filename=f"{fig_dir}/plot_kinematics_open.png")
+        plot_kinematics_errors(args, test_eval, loop = 'open', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
 
-    #Global Closed Plots
-    plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_kinematics_closed.png")
-    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
+        #Global Closed Plots
+        plot_kinematics_time_series(args, test_eval, loop = 'closed', filename=f"{fig_dir}/plot_kinematics_closed.png")
+        plot_kinematics_errors(args, test_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
     
     
     

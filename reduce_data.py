@@ -116,8 +116,8 @@ def process_directory(input_dir, output_dir, mode, value, time_col='timestamp'):
 if __name__ == "__main__":
     
     # 1. CONFIGURATION
-    INPUT_FOLDER = "data\\dataset"
-    OUTPUT_FOLDER = "data\\reduce_row_number_2"
+    INPUT_FOLDER = "data\\Waypoint_raw"
+    OUTPUT_FOLDER = "data\\Waypoint_reduced"
     
     # Modes: 'total_points' (row count), 'time_interval' (seconds), 'cutoff' (first N)
     REDUCTION_MODE = 'total_points' 

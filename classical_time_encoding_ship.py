@@ -1,178 +1,168 @@
 from utils import *
+import torch
+import os
+import datetime
+import argparse
+from copy import deepcopy
 
 def run_classical(args):
-
     # Setup
     timestamp = datetime.datetime.now().strftime("%m-%d_%H-%M-%S")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Running Classical Experiment on: {device}")
     
-    # --- DATA LOADING (Same as QNN) ---
-    df = pd.read_csv(args.data, index_col=0)
+    # Fix seed
+    seed = args.run
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    print(f"Running Classical Experiment on: {device} | Seed: {seed}")
     
-    # Extract dataset info
-    args.data_n = len(df)
-    timestamps = pd.Series(df.index)
-    dt_avg = timestamps.diff().median()
-    args.data_dt = float(f"{dt_avg:.4f}")
-    print(f"\nDataset: N = {args.data_n} | dt = {args.data_dt} s")
+    # 1. SETUP PATHS (Assuming standard subfolders like QNN)
+    print(f"\n[Data Loading] Root Directory: {args.data}")
+    train_dir = os.path.join(args.data, "train")
+    val_dir = os.path.join(args.data, "validation")
+    test_dir = os.path.join(args.data, "test")
 
-    df['delta Surge Velocity'] = df['Surge Velocity'].diff().fillna(0)
-    df['delta Sway Velocity'] = df['Sway Velocity'].diff().fillna(0)
-    df['delta Yaw Rate'] = df['Yaw Rate'].diff().fillna(0)
-    df['delta Yaw Angle'] = df['Yaw Angle'].diff().fillna(0)
-
-    control_cols = ["Rudder Angle (deg)", "Rudder Angle (rad)"] # Add whatever names you use
+    # 2. LOAD DATASETS (Using the new directory-based prepare_dataset)
+    print("\nProcessing TRAINING Set...")
+    x_train, y_train, x_scaler, y_scaler = prepare_dataset_from_directory(
+        train_dir, args, fit_scalers=True
+    )
     
-    for col in control_cols:
-        if col in df.columns:
-            # Shift (-1 means move next row's value to current row)
-            df[col] = df[col].shift(-1) 
-            print(f"Shifted feature '{col}' by -1 step (Predicting t using Action t)")
-
-    # 3. Drop the last row (which is now NaN because of the shift)
-    df.dropna(inplace=True)
+    print("Processing VALIDATION Set...")
+    x_val, y_val, _, _ = prepare_dataset_from_directory(
+        val_dir, args, x_scaler=x_scaler, y_scaler=y_scaler, fit_scalers=False
+    )
     
-    # Feature selection
-    select_list = getattr(args, 'select_features', None)
-    drop_list = getattr(args, 'drop_features', None)
-    if select_list:
-        args.features = map_names(args.select_features)
-    elif drop_list:
-        args.features = [f for f in full_feature_set if f not in map_names(args.drop_features)]
-    else:
-        args.features = full_feature_set
+    print("Processing TEST Set...")
+    x_test, y_test, _, _ = prepare_dataset_from_directory(
+        test_dir, args, x_scaler=x_scaler, y_scaler=y_scaler, fit_scalers=False
+    )
 
-    print(f"{len(args.features)} features selected: {args.features}")
+    print(f"\nData Shapes:")
+    print(f"  Train: X={x_train.shape}, Y={y_train.shape}")
+    print(f"  Val:   X={x_val.shape},   Y={y_val.shape}")
+    print(f"  Test:  X={x_test.shape},  Y={y_test.shape}")
 
-    # Feature Map
-    args.targets = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"] if args.predict == "delta" else ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
+    # Set metadata for logging
+    args.data_n = x_train.shape[0] + x_val.shape[0] + x_test.shape[0]
+    args.data_dt = 4.5 # Standard ship resolution
+
+    # 3. MODEL SETUP
+    input_dim = x_train.shape[2] 
+    output_dim = y_train.shape[2] 
     
-    print(f"Features: {args.features}")
-    feature_seqs, prediction_seqs = get_seqs(df, args.features, args.targets)
-
-    # Split
-    num_folds = 4
-    split_indices = get_fold_indices(len(feature_seqs), num_folds)
-    test_start, test_end = split_indices[args.testing_fold], split_indices[args.testing_fold + 1]
-    train_val_indices = np.delete(np.arange(len(feature_seqs)), np.arange(test_start, test_end))
-    train_mask = train_val_indices[:int(len(train_val_indices)*(1 - 0.15))]
-
-    # Scaling
-    x_scaler = MinMaxScaler(feature_range=(0, 1)) # Standard [0,1] for classical
-    x_scaler.fit(feature_seqs[train_mask])
-    x_norm = x_scaler.transform(feature_seqs)
-
-    if args.norm:
-        y_scaler = MinMaxScaler(feature_range=(-1, 1))
-        y_scaler.fit(prediction_seqs[train_mask])
-        y_norm = y_scaler.transform(prediction_seqs)
-    else:
-        y_scaler = None
-        y_norm = prediction_seqs
-
-    # Windowing
-    x_folds, y_folds = make_sliding_window_ycustom_folds(x_norm, y_norm, args.window_size, args.horizon, num_folds)
-    
-    # Datasets
-    x_test = x_folds[args.testing_fold]
-    y_test = y_folds[args.testing_fold]
-    
-    train_val_indices_list = [i for i in range(num_folds) if i != args.testing_fold]
-    x_train_val = np.concatenate([x_folds[i] for i in train_val_indices_list], axis=0)
-    y_train_val = np.concatenate([y_folds[i] for i in train_val_indices_list], axis=0)
-    
-    x_train, x_val, y_train, y_val = train_test_split(x_train_val, y_train_val, test_size=0.15, shuffle=False, random_state=args.run)
-    print(f"Train: {x_train.shape} | Val: {x_val.shape} | Test: {x_test.shape}")
-
-    # --- MODEL SETUP ---
-    input_dim = x_train.shape[2] # Number of features
-    output_dim = y_train.shape[1] * y_train.shape[2] # Horizon * 2 (flattened output usually)
-    
-    # NOTE: PyTorch LSTM expects output_dim to be features per step, usually 2 for us.
-    # But y_train is (N, Horizon, 2).
-    # If Horizon > 1, we need to flatten targets or adjust model output.
-    # For simplicity, let's flatten targets for training: (N, Horizon*2)
+    # Target flattening for training (N, Horizon, T) -> (N, Horizon*T)
+    # PyTorch logic requires flattened targets for basic MSELoss
     y_train_flat = y_train.reshape(y_train.shape[0], -1)
-    # y_val_flat = y_val.reshape(y_val.shape[0], -1)
-    
-    model = ClassicalLSTM(
+
+    raw_model = ClassicalLSTM(
         input_size=input_dim,
         hidden_size=args.hidden_size,
         num_layers=args.layers,
-        output_size=output_dim, # Flattened output size
-        seed=args.run
+        output_size=y_train.shape[1] * output_dim, # Total flattened outputs
+        seed=seed
     )
-    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    
+    # Compatibility Wrapper for evaluate_model
+    wrapper = ClassicalWrapper(raw_model, device, output_shape=y_train.shape)
+    
+    num_params = sum(p.numel() for p in raw_model.parameters() if p.requires_grad)
     print(f"\nTotal Trainable Parameters: {num_params}")
-    # --- TRAINING ---
-    results = train_classical_model(args, model, x_train, y_train_flat, x_val, y_val, y_scaler=y_scaler,device=device)
 
-    # --- EVALUATION ---
-    # We need to wrap the evaluation because 'evaluate_model' expects a QNN-style 'model.forward(x, params)' interface.
-    # We will create a dummy wrapper class that behaves like the QNN wrapper.
+    # 4. TRAINING
+    results = train_classical_model(args, raw_model, x_train, y_train_flat, x_val, y_val, y_scaler=y_scaler, device=device)
+
+    # ==============================================================================
+    # 5. MODEL SELECTION (VALIDATION SET) - Unified Logic
+    # ==============================================================================
+    print("\n[Model Selection] Comparing 'Best' vs 'Final' weights on VALIDATION set...")
     
+    val_eval_best = evaluate_model(args, wrapper, results['best_weights'], x_val, y_val, x_scaler, y_scaler)
+    val_eval_final = evaluate_model(args, wrapper, results['final_weights'], x_val, y_val, x_scaler, y_scaler)
+    
+    metric_key = 'Global_open_MSE'
+    score_best = val_eval_best['metrics'][metric_key]
+    score_final = val_eval_final['metrics'][metric_key]
+    
+    print(f"  > Validation {metric_key}: Best Weights={score_best:.5f} | Final Weights={score_final:.5f}")
 
+    if score_best < score_final:
+        selected_weights_type = "Best (Lowest Val Loss)"
+        selected_weights = results['best_weights']
+        selected_val_metrics = val_eval_best
+        print(f"  > Selected: BEST weights")
+    else:
+        selected_weights_type = "Final (Last Iteration)"
+        selected_weights = results['final_weights']
+        selected_val_metrics = val_eval_final
+        print(f"  > Selected: FINAL weights")
 
-    wrapper = ClassicalWrapper(model, device,output_shape=y_train.shape)
+    # ==============================================================================
+    # 6. FINAL TESTING (TEST SET)
+    # ==============================================================================
+    print("\n[Testing] Evaluating SELECTED weights on TEST set...")
+    test_eval = evaluate_model(args, wrapper, selected_weights, x_test, y_test, x_scaler, y_scaler)
+    
+    # Inject selected weights into results dict for saving
+    results['selected_weights'] = selected_weights
 
-    # Save directories
-    fig_dir = f"figures/{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}"
-    os.makedirs(fig_dir, exist_ok=True)
-
-    # Plot Convergence
-    plot_convergence(args, results, filename=f"{fig_dir}/{timestamp}_convergence_classical.png")
-
-    print(f"\n--- Evaluation (Best Weights) ---")
-    best_eval = evaluate_model(args, wrapper, results['best_weights'], x_test, y_test, x_scaler, y_scaler)
-
-    print(f"\n--- Evaluation (Final Weights) ---")
-    final_eval = evaluate_model(args, wrapper, results['final_weights'], x_test, y_test, x_scaler, y_scaler)
-
-    # Local plots
-    plot_kinematics_branches(args, final_eval, filename=f"{fig_dir}/plot_branches_local.png")
-    plot_kinematics_boxplots(args, final_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
-
-    # Global Open Plots
-    plot_kinematics_time_series(args, final_eval, loop = 'open', filename=f"{fig_dir}/plot_trajectory_open.png")
-    plot_kinematics_errors(args, final_eval, loop = 'open', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
-
-    #Global Closed Plots
-    plot_kinematics_time_series(args, final_eval, loop = 'closed', filename=f"{fig_dir}/plot_trajectory_closed.png")
-    plot_kinematics_errors(args, final_eval, loop = 'closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
+    # 7. SAVE RESULTS
     scalers = [x_scaler, y_scaler]
-    save_classical_results(args, results, best_eval, final_eval, scalers=scalers, timestamp=timestamp)
-    load_experiment_results(f"models/{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl")
-
+    saved_file = save_classical_results(
+        args, 
+        results, 
+        selected_val_metrics, 
+        test_eval, 
+        scalers=scalers, 
+        timestamp=timestamp,
+        selection_type=selected_weights_type
+    )
     
-if __name__ == '__main__':
+    # Load and Print Summary
+    load_experiment_results(saved_file)
 
+    # 8. PLOTTING
+    if args.save_plot or args.show_plot:
+        fig_dir = saved_file.replace("models", "figures").replace(".pkl", "")
+        os.makedirs(fig_dir, exist_ok=True)
+
+        plot_convergence(args, results, filename=f"{fig_dir}/plot_convergence.png")
+        plot_kinematics_branches(args, test_eval, filename=f"{fig_dir}/plot_branches_local.png")
+        plot_kinematics_boxplots(args, test_eval, mode='local', filename=f"{fig_dir}/plot_horizon_errors")
+        plot_kinematics_time_series(args, test_eval, loop='open', filename=f"{fig_dir}/plot_trajectory_open.png")
+        plot_kinematics_errors(args, test_eval, loop='open', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
+        plot_kinematics_time_series(args, test_eval, loop='closed', filename=f"{fig_dir}/plot_trajectory_closed.png")
+        plot_kinematics_errors(args, test_eval, loop='closed', filename=f"{fig_dir}/compare_error/plot_error_vs_time")
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-    # Data & Task
-    parser.add_argument('--data', type=str, default="datasets/zigzag_10_40_ood_reduced_2_s.csv")
+    # Data & Task (Matches your QNN parser)
+    parser.add_argument('--data', type=str, default="dataset")
     parser.add_argument('-select', '--select_features', type=str, nargs='+', help="Explicitly select features")
     parser.add_argument('-drop', '--drop_features', type=str, nargs='+', help="Drop features")
     parser.add_argument('-ws', '--window_size', type=int, default=5)
-    parser.add_argument('-y', '--horizon', type=int, default=5) # FIXED: Was 1, now 5
-    parser.add_argument('-t', '--testing_fold', type=int, default=3)
+    parser.add_argument('-y', '--horizon', type=int, default=5)
     parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'motion'])
     parser.add_argument('--norm', type=str2bool, default=True, choices=[True, False])
+    parser.add_argument('--weights', type=str, default="[1.0, 1.0, 1.0, 1.0]")
     
     # Classical Model Hyperparameters
-    parser.add_argument('--optimizer', type=str, default='Adam', help="Optimizer name (for logging)")
-    parser.add_argument('--hidden_size', type=int, default=16, help="LSTM hidden units")
-    parser.add_argument('--layers', type=int, default=1, help="Number of LSTM layers")
+    parser.add_argument('--model', type=str, default='classical')
+    parser.add_argument('--optimizer', type=str, default='Adam')
+    parser.add_argument('--hidden_size', type=int, default=16)
+    parser.add_argument('--layers', type=int, default=1)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--learning_rate', type=float, default=0.005)
     parser.add_argument('--maxiter', type=int, default=100, help="Epochs")
     parser.add_argument('--patience', type=int, default=50)
     
-    # Flags (Synchronized)
-    parser.add_argument('-rt', '--reconstruct_train', type=str2bool, choices=[True, False], default=False)
-    parser.add_argument('-rv', '--reconstruct_val', type=str2bool, choices=[True, False], default=False) # FIXED: Was True, now False
-    parser.add_argument('--show_plot', type=str2bool, choices=[True, False], default=False)
-    parser.add_argument('--save_plot', type=str2bool, choices=[True, False], default=True) # ADDED
+    # Flags
+    parser.add_argument('-rt', '--reconstruct_train', type=str2bool, default=False)
+    parser.add_argument('-rv', '--reconstruct_val', type=str2bool, default=False) 
+    parser.add_argument('--show_plot', type=str2bool, default=False)
+    parser.add_argument('--save_plot', type=str2bool, default=True)
     parser.add_argument('--run', type=int, default=0)
     
     args = parser.parse_args()
