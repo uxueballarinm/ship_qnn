@@ -1,4 +1,8 @@
-# --- Python ---
+# --- System Files ---
+.DS_Store
+Thumbs.db
+
+# --- Python & Environments ---
 __pycache__/
 *.pyc
 *.pyo
@@ -6,54 +10,33 @@ __pycache__/
 .Python
 env/
 venv/
-.ipynb_checkpoints
-
-# --- Entornos Virtuales (Virtual Environments) ---
-# Nombres comunes para carpetas de entorno
-env/
-venv/
 .env
 .venv/
 qml-torch-env/
 
-# --- VS Code ---
+# --- IDEs & Notebooks ---
 .vscode/
 *.code-workspace
-
-# --- Jupyter Notebooks ---
 .ipynb_checkpoints
 
-# --- Datos (Opcional, descomenta si quieres ignorar datos pesados) ---
-# data/
-# *.csv
-# *.h5
-# *.pth
-
-# --- Windows / Mac System Files ---
-Thumbs.db
-.DS_Store
-
-__pycache__/
-*.pyc
-*.pyo
-
+# --- Project Specific Folders ---
+mandar_gemini/
+old_experiments/
+models/disaster_folder/
 figures/
-
-.txt
-.csv
-
-
 data/
 
-mandar_gemini/
+# --- Logs & Data Files ---
+# We allow the logs directory itself
+logs/
 
+# Ignore all text and CSV files everywhere in the project
+*.txt
+*.csv
 
+# Ignore specific heavy data formats
+*.h5
+*.pth
 
-
-
-models/disaster_folder/
-
-old_experiments/
-
-
-
+# NOTE: Excel files (.xlsx, .xls) are NOT listed above, 
+# so they will be tracked and uploaded by default.
