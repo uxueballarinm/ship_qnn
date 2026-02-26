@@ -3,10 +3,10 @@ import glob
 import os
 
 def merge_backups():
-    excel_path = "logs\\one_head_map_search_optimization\\experiments_summary.xlsx"
+    excel_path = "logs\experiments_mapping_order_encoding\experiments_summary.xlsx"
     
     # 1. Find all backup CSV files
-    backup_files = glob.glob("logs\\backup_02-26_08-26-58.csv")
+    backup_files = glob.glob("logs\\backup_02-17_13-53-55.csv")
     
     if not backup_files:
         print("No backup files found in 'logs/'.")
