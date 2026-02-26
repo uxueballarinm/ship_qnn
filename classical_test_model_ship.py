@@ -9,7 +9,7 @@ from copy import deepcopy
 
 # Import utilities
 try:
-    from utils import *
+    from qnn_utils import *
 except ImportError:
     print("Error: Could not import necessary modules.")
     sys.exit(1)

@@ -1,0 +1,1188 @@
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: &id001 [0.05, 0.001]
+  perturbation: 0.1
+  weights: &id002 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: efficientsu2
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: realamplitudes
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: realamplitudes
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: full
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 3
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: massive_topology_search
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *id001
+  perturbation: 0.1
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 6
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: [0, 1, 2, 3, 4, -1]

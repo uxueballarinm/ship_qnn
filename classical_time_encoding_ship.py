@@ -1,4 +1,4 @@
-from utils import *
+from qnn_utils import *
 import torch
 import os
 import datetime

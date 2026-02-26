@@ -42,10 +42,7 @@ figures/
 logs/
 .txt
 .csv
-.xlsx
 
-/models
-.pkl
 
 data/
 
@@ -55,6 +52,9 @@ mandar_gemini/
 
 
 
-experiment_definitions/
+models/disaster_folder/
+
+old_experiments/
+
 
 

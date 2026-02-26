@@ -1,0 +1,814 @@
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: &id001 [0.05, 0.001]
+  perturbation: 0.15
+  weights: &id002 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: &id003 [-1, 0, 1, 2, 3, 4]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id003
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id003
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: &id004 [-1, 2, 4, 0, 3, 1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id004
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id004
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: &id005 [0, 1, -1, 2, 3, 4]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: &id006 [4, 2, -1, 0, 3, 1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id006
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id006
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: &id007 [0, 3, 1, -1, 4, 2]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id007
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id007
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: &id008 [1, 3, 0, 4, 2, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id008
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id008
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id003
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id003
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id003
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id004
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id004
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id004
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id006
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id006
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id006
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id007
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id007
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id007
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id008
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id008
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 2
+    ansatz: efficientsu2
+    entangle: full
+    encoding: serial
+    map: *id008
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: one_head_map_search_optimization
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: *id003

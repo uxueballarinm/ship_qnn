@@ -1,6 +1,6 @@
 # Import from your existing utils
-from utils import *
-from utils import _compute_loss
+from qnn_utils import *
+from qnn_utils import _compute_loss
 
 def build_multihead_model(args):
     """

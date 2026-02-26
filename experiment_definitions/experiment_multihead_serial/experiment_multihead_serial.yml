@@ -1,0 +1,1570 @@
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: &id001 [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: &id002 [0.05, 0.001]
+  perturbation: 0.15
+  weights: &id003 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id004 [wv]
+    output_dim: 1
+    map: &id005 [0, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id006 [sv, yr, ya, rarad]
+    output_dim: 3
+    map: &id007 [0, 1, 2, 3, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id005
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id006
+    output_dim: 3
+    map: *id007
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id005
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id006
+    output_dim: 3
+    map: *id007
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id005
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id006
+    output_dim: 3
+    map: *id007
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id005
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id006
+    output_dim: 3
+    map: *id007
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id008 [wv, sv, rarad]
+    output_dim: 2
+    map: &id009 [0, 1, 2]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id010 [yr, ya]
+    output_dim: 2
+    map: &id011 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id008
+    output_dim: 2
+    map: *id009
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id010
+    output_dim: 2
+    map: *id011
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id008
+    output_dim: 2
+    map: *id009
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id010
+    output_dim: 2
+    map: *id011
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id008
+    output_dim: 2
+    map: *id009
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id010
+    output_dim: 2
+    map: *id011
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id008
+    output_dim: 2
+    map: *id009
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id010
+    output_dim: 2
+    map: *id011
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id012 [wv]
+    output_dim: 1
+    map: &id013 [0, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id014 [sv]
+    output_dim: 1
+    map: &id015 [0, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id016 [yr, ya, rarad]
+    output_dim: 2
+    map: &id017 [0, 1, 2]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id012
+    output_dim: 1
+    map: *id013
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id014
+    output_dim: 1
+    map: *id015
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id016
+    output_dim: 2
+    map: *id017
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id012
+    output_dim: 1
+    map: *id013
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id014
+    output_dim: 1
+    map: *id015
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id016
+    output_dim: 2
+    map: *id017
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id012
+    output_dim: 1
+    map: *id013
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id014
+    output_dim: 1
+    map: *id015
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id016
+    output_dim: 2
+    map: *id017
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id012
+    output_dim: 1
+    map: *id013
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id014
+    output_dim: 1
+    map: *id015
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id016
+    output_dim: 2
+    map: *id017
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id018 [yr, ya, rarad]
+    output_dim: 2
+    map: &id019 [0, 1, 2]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id020 [wv, sv]
+    output_dim: 2
+    map: &id021 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id018
+    output_dim: 2
+    map: *id019
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id020
+    output_dim: 2
+    map: *id021
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id018
+    output_dim: 2
+    map: *id019
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id020
+    output_dim: 2
+    map: *id021
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id018
+    output_dim: 2
+    map: *id019
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id020
+    output_dim: 2
+    map: *id021
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id018
+    output_dim: 2
+    map: *id019
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id020
+    output_dim: 2
+    map: *id021
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id022 [sv]
+    output_dim: 1
+    map: &id023 [0, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id024 [wv, yr, ya, rarad]
+    output_dim: 3
+    map: &id025 [0, 1, 2, 3, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id022
+    output_dim: 1
+    map: *id023
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id024
+    output_dim: 3
+    map: *id025
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id022
+    output_dim: 1
+    map: *id023
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id024
+    output_dim: 3
+    map: *id025
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id022
+    output_dim: 1
+    map: *id023
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id024
+    output_dim: 3
+    map: *id025
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id022
+    output_dim: 1
+    map: *id023
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id024
+    output_dim: 3
+    map: *id025
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id026 [wv, sv, yr]
+    output_dim: 3
+    map: &id027 [0, 1, 2]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id028 [ya, rarad]
+    output_dim: 1
+    map: &id029 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id026
+    output_dim: 3
+    map: *id027
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id028
+    output_dim: 1
+    map: *id029
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id026
+    output_dim: 3
+    map: *id027
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id028
+    output_dim: 1
+    map: *id029
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id026
+    output_dim: 3
+    map: *id027
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id028
+    output_dim: 1
+    map: *id029
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id026
+    output_dim: 3
+    map: *id027
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id028
+    output_dim: 1
+    map: *id029
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id030 [rarad]
+    output_dim: 1
+    map: &id031 [0, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id032 [wv, sv, yr, ya]
+    output_dim: 3
+    map: &id033 [0, 1, 2, 3, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id030
+    output_dim: 1
+    map: *id031
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id032
+    output_dim: 3
+    map: *id033
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id030
+    output_dim: 1
+    map: *id031
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id032
+    output_dim: 3
+    map: *id033
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id030
+    output_dim: 1
+    map: *id031
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id032
+    output_dim: 3
+    map: *id033
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id030
+    output_dim: 1
+    map: *id031
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id032
+    output_dim: 3
+    map: *id033
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id034 [wv, sv, yr]
+    output_dim: 2
+    map: &id035 [0, 1, 2]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id036 [ya, rarad]
+    output_dim: 2
+    map: &id037 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id034
+    output_dim: 2
+    map: *id035
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id036
+    output_dim: 2
+    map: *id037
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id034
+    output_dim: 2
+    map: *id035
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id036
+    output_dim: 2
+    map: *id037
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id034
+    output_dim: 2
+    map: *id035
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id036
+    output_dim: 2
+    map: *id037
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id034
+    output_dim: 2
+    map: *id035
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id036
+    output_dim: 2
+    map: *id037
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id038 [wv, yr, rarad]
+    output_dim: 2
+    map: &id039 [0, 1, 2]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id040 [sv, ya]
+    output_dim: 2
+    map: &id041 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id038
+    output_dim: 2
+    map: *id039
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id040
+    output_dim: 2
+    map: *id041
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id038
+    output_dim: 2
+    map: *id039
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id040
+    output_dim: 2
+    map: *id041
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id038
+    output_dim: 2
+    map: *id039
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id040
+    output_dim: 2
+    map: *id041
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id038
+    output_dim: 2
+    map: *id039
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id040
+    output_dim: 2
+    map: *id041
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  heads_config:
+  - features: &id042 [wv, rarad]
+    output_dim: 2
+    map: &id043 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id044 [sv, yr]
+    output_dim: 1
+    map: &id045 [0, 1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: &id046 [ya]
+    output_dim: 1
+    map: &id047 [0, -1, -1]
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: *id042
+    output_dim: 2
+    map: *id043
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id044
+    output_dim: 1
+    map: *id045
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id046
+    output_dim: 1
+    map: *id047
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: *id042
+    output_dim: 2
+    map: *id043
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id044
+    output_dim: 1
+    map: *id045
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id046
+    output_dim: 1
+    map: *id047
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  heads_config:
+  - features: *id042
+    output_dim: 2
+    map: *id043
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id044
+    output_dim: 1
+    map: *id045
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id046
+    output_dim: 1
+    map: *id047
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: multihead_serial_grid
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  heads_config:
+  - features: *id042
+    output_dim: 2
+    map: *id043
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id044
+    output_dim: 1
+    map: *id045
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
+  - features: *id046
+    output_dim: 1
+    map: *id047
+    reps: 3
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: reverse_linear
