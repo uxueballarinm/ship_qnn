@@ -27,16 +27,18 @@ figures/
 data/
 
 # --- Logs & Data Files ---
-# We allow the logs directory itself
-logs/
+# 1. Allow the logs directory and all its nested subfolders
+logs/**/
 
-# Ignore all text and CSV files everywhere in the project
+# 2. Block .txt and .csv files EVERYWHERE (including inside logs)
 *.txt
 *.csv
 
-# Ignore specific heavy data formats
+# 3. Specifically UN-IGNORE Excel files ONLY inside the logs folder 
+# (This acts as a safety net to make sure they are always tracked)
+!logs/**/*.xlsx
+!logs/**/*.xls
+
+# --- Heavy Data (Optional) ---
 *.h5
 *.pth
-
-# NOTE: Excel files (.xlsx, .xls) are NOT listed above, 
-# so they will be tracked and uploaded by default.
