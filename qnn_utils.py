@@ -250,16 +250,43 @@ def _parse_feature_map(map_input, selected_features):
             if full_name in feat_to_idx: indices.append(feat_to_idx[full_name])
             else: raise ValueError(f"Feature '{item}' ({full_name}) in map but NOT in selected features: {selected_features}")
     return indices
+# def _validate_chunk_completeness(chunk, num_features, layer_idx=None):
+#     """Validates that a layer contains exactly one instance of every feature."""
+#     valid = [x for x in chunk if x != -1]
+#     context = f"Layer {layer_idx}" if layer_idx is not None else "Template"
+    
+#     if len(valid) != len(set(valid)):
+#         raise ValueError(f"[ERROR] [Map] Found duplicate features in {context}. Segment: {chunk}")
+#     if set(valid) != set(range(num_features)):
+#         raise ValueError(f"[ERROR] [Map] Missing or extra features in {context}. Segment: {chunk}")
 def _validate_chunk_completeness(chunk, num_features, layer_idx=None):
-    """Validates that a layer contains exactly one instance of every feature."""
+    """
+    Validates that a layer contains all features at least once.
+    ALLOWS duplicate features for parameter repetition (re-uploading).
+    """
+    # Filter out -1 (bias or idle qubits)
     valid = [x for x in chunk if x != -1]
     context = f"Layer {layer_idx}" if layer_idx is not None else "Template"
     
-    if len(valid) != len(set(valid)):
-        raise ValueError(f"[ERROR] [Map] Found duplicate features in {context}. Segment: {chunk}")
-    if set(valid) != set(range(num_features)):
-        raise ValueError(f"[ERROR] [Map] Missing or extra features in {context}. Segment: {chunk}")
+    # 1. REMOVED the uniqueness check to allow parameter repetition
+    # Previously: if len(valid) != len(set(valid)): raise ValueError(...)
     
+    # 2. CHECK: Does the map still contain every required feature index?
+    # We use set() to ensure that even with duplicates, the full range is present.
+    required_features = set(range(num_features))
+    current_features = set(valid)
+    
+    if current_features != required_features:
+        missing = required_features - current_features
+        extra = current_features - required_features
+        
+        error_msg = f"[ERROR] [Map] {context} is incomplete."
+        if missing: 
+            error_msg += f" Missing features: {missing}."
+        if extra: 
+            error_msg += f" Invalid feature indices found: {extra}."
+        
+        raise ValueError(f"{error_msg} Segment: {chunk}")
 def _load_and_validate_map(args, config):
     """Main processor for feature map parsing and validation."""
     reorder_active = getattr(args, 'reorder', True)
