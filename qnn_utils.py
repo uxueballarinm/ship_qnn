@@ -1230,6 +1230,7 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     raw_data['weight_selection'] = selection_type
     raw_data['head_number'] = head_number
     raw_data['heads_config'] = heads_config_str
+    raw_data['weights'] = getattr(args, 'weights',"[1.0, 1.0, 1.0, 1.0]")
     raw_data['initialization'] = getattr(args, 'initialization', 'N/A')
     val_keys_map = {
         'Global_open_MSE': 'Val Global Open MSE',
@@ -1276,7 +1277,7 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
         "features", "targets", "window_size", "horizon", "predict", "norm", 
         "reconstruct_train", "reconstruct_val", "model", "heads_config",  "head_number","encoding", "ansatz", 
         "entangle", "reps", "map", "reorder", 
-        "optimizer", "maxiter","iterations",  "tolerance", "batch_size", "learning_rate", "perturbation",
+        "optimizer", "maxiter","iterations",  "tolerance", "batch_size", "learning_rate", "perturbation", "weights",
         "total params", "q params", "c params","final val loss", 
         "Val Global Open MSE", "Val Global Open R2", "Val Global Closed R2",
         "step MSE", "step R2", 

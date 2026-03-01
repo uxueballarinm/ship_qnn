@@ -1,0 +1,41 @@
+# Thesis Optimization: Two-Head Quantum Multi-Fidelity Model
+# Goal 1: Maximize Open-Loop accuracy through feature-specific topologies.
+# Goal 2: Stabilize Closed-Loop through physics-prioritized weighting.
+
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: thesis_final_optimization
+  select_features: [wv, sv, yr, ya, rarad]
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: [0.05, 0.001]
+  perturbation: 0.15
+  # Physics-Informed Weights: [Surge, Sway, YawRate, YawAngle]
+  # Sway and Yaw Rate are weighted 5x to stabilize recursive feedback.
+  weights: [1.0, 5.0, 5.0, 2.0] 
+  initialization: identity
+  save_plot: true
+  run: 1
+  heads_config:
+    # HEAD 1: Surge Kinematics (High-accuracy branch)
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      encoding: serial
+      ansatz: efficientsu2
+      entangle: reverse_linear
+      # Map uses bias (-1) to establish reference frame before re-uploading
+      map: [-1, 0, 1, -1, 0, 1] 
+
+    # HEAD 2: Hydrodynamic Maneuvering (Sway/Yaw branch)
+    - features: [sv, yr, ya, rarad]
+      output_dim: 3
+      reps: 3
+      encoding: serial
+      ansatz: efficientsu2
+      entangle: reverse_linear
+      # Map repeats Sway (0) and Yaw Rate (1) for higher kernel frequency
+      map: [0, 1, 2, 3, 0, 1]
