@@ -133,7 +133,7 @@ def run(args):
             estimator = Estimator(options=estimator_options)
             obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
             estimator_qnn = EstimatorQNN(
-                circuit=qc, input_params=in_p, weight_params=w_p, observables=obsvs, estimator=estimator, input_gradients=False,  pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed))
+                circuit=qc, input_params=in_p, weight_params=w_p, observables=obsvs, estimator=estimator, input_gradients=False,  pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed))#TODO: Change optimization level?
             
             # --- D. Determine Output Size ---
             # The head output size = number of targets assigned to this head.

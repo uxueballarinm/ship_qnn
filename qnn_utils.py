@@ -1470,33 +1470,41 @@ def find_existing_experiment(current_args, models_root="models"):
             
     print(f"{C_YELLOW}[Cache Search] No identical experiment found in models/ folder.{C_RESET}")
     return None, None
-def save_classical_results(args, train_results, val_eval, test_eval, scalers, timestamp, selection_type="Unknown", excel_path = None):
+def save_classical_results(args, train_results, val_eval, test_eval, scalers, timestamp, selection_type="Unknown", excel_path=None):
     """
     Saves detailed results specifically for Classical Models (LSTM/RNN).
-    Saves to: logs/classical_experiments_summary.xlsx
+    Standardized to match Quantum experiment directory structure.
     """
-    if excel_path is None:
-        excel_filename = "logs/classical_experiments_summary.xlsx"
-    else:
-        excel_filename = excel_path
-    # 1. Create Folders
-    for folder in ["models", "logs", "figures"]:
+    # Fix 1: Ensure directories are based on the save_dir argument
+    save_dir = getattr(args, 'save_dir', 'classical_baselines')
+    models_dir = os.path.join("models", save_dir)
+    logs_dir = os.path.join("logs", save_dir)
+    figs_dir = os.path.join("figures", save_dir)
+
+    for folder in [models_dir, logs_dir, figs_dir]:
         os.makedirs(folder, exist_ok=True)
+
+    # Use provided excel_path or default to the logs_dir
+    excel_filename = excel_path if excel_path else os.path.join(logs_dir, "classical_experiments_summary.xlsx")
+    
+    # Fix 2: Construct the filename once using the correct directory
+    model_name = f"{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}_hidd{args.hidden_size}.pkl"
+    model_filename = os.path.join(models_dir, model_name)
+
     selected_w = train_results.get('selected_weights', train_results['final_weights'])
     total_params = sum(p.numel() for p in selected_w.values())
-    # 2. Save Model (Pickle)
-    model_filename = f"models/{timestamp}_classical_adam_f{len(args.features)}_w{args.window_size}_h{args.horizon}.pkl"
     
+    # 2. Save Model (Pickle)
     save_payload = {
         "config": vars(args),
-        "best_weights": train_results['best_weights'],
-        "final_weights": train_results['final_weights'],
+        "best_weights": train_results.get('best_weights'), # Use .get to avoid KeyError
+        "final_weights": train_results.get('final_weights'),
         "selected_weights": selected_w,
         "weight_selection_method": selection_type,
         "train_history": train_results['train_history'],
         "val_history": train_results['val_history'],
-        "val_metrics": val_eval['metrics'],    # Winner's validation metrics
-        "test_metrics": test_eval['metrics'],  # Winner's test metrics
+        "val_metrics": val_eval['metrics'],
+        "test_metrics": test_eval['metrics'],
         "y_scaler": scalers[1],
         "x_scaler": scalers[0]
     }
@@ -1506,11 +1514,10 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
 
     # 3. Save Summary to Excel
     m_val, m_test = val_eval['metrics'], test_eval['metrics']
-    # Timestamp to date format (Default 2026)
     try:
         dt_temp = datetime.datetime.strptime(timestamp, "%m-%d_%H-%M-%S")
         dt_object = dt_temp.replace(year=2026)
-    except ValueError:
+    except Exception:
         dt_object = timestamp
 
     ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot']
@@ -1521,7 +1528,7 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
         return v
 
     def normalize_loaded_bools(val):
-        if isinstance(val, bool): return str(val).lower()
+        if isinstance(val, (bool, np.bool_)): return str(val).lower()
         if isinstance(val, str):
             if val.upper() in ['TRUE', 'VERDADERO']: return 'true'
             if val.upper() in ['FALSE', 'FALSO']: return 'false'
@@ -1538,108 +1545,64 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
 
     metrics_flat = {
         "date": dt_object,
-        "model_id": model_filename.split('/')[-1],
+        "model_id": os.path.basename(model_filename),
         "model": "classical_lstm",
         "weight_selection": selection_type,
-        
-        # --- NEW VALIDATION COLUMNS ---
         "Val Global Open MSE": m_val.get('Global_open_MSE'),
         "Val Global Open R2": m_val.get('Global_open_R2'),
         "Val Global Closed R2": m_val.get('Global_closed_R2'),
-
-        # --- TEST COLUMNS ---
         "step MSE": m_test.get('Step_MSE'),
         "step R2": m_test.get('Step_R2'),
         "local MSE": m_test.get('Local_MSE'),
-        "local ADE": m_test.get('Local_ADE'),
         "global open MSE": m_test.get('Global_open_MSE'),
         "global open R2": m_test.get('Global_open_R2'),
-        "global open ADE": m_test.get('Global_open_ADE'),
-        "global open FDE": m_test.get('Global_open_FDE'),
         "global closed MSE": m_test.get('Global_closed_MSE'),
         "global closed R2": m_test.get('Global_closed_R2'),
-        "global closed ADE": m_test.get('Global_closed_ADE'),
-        "global closed FDE": m_test.get('Global_closed_FDE'),
-        
         "final val loss": train_results['val_history'][-1] if train_results['val_history'] else None,
         "total params": total_params,
-        "iterations": len(train_results['train_history'])
+        "iterations": len(train_results['train_history']),
+        "recursivity": m_test.get('Recursivity')
     }
     raw_data.update(metrics_flat)
 
+    # Per-Target Mapping
     target_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]
-    metric_types = [
-        "Step_MSE", "Step_R2", "Local_MSE", "Local_ADE",
-        "Global_open_MSE", "Global_open_R2", "Global_open_ADE", "Global_open_FDE",
-        "Global_closed_MSE", "Global_closed_R2", "Global_closed_ADE", "Global_closed_FDE"
-    ]
+    metric_types = ["Step_MSE", "Step_R2", "Global_open_R2", "Global_closed_R2"]
     
-    per_target_cols = []
     for tgt in target_names:
         for m_type in metric_types:
             key_in_dict = f"{tgt}_{m_type}"
             if key_in_dict in m_test:
                 col_name = key_in_dict.replace("_", " ") 
                 raw_data[col_name] = m_test[key_in_dict]
-                per_target_cols.append(col_name)
         
     column_order = [
-        "date", "model_id", "run", "weight_selection",
-        "data", "data_n", "data_dt", 
-        "features", "targets", "window_size", "horizon", 
-        "predict", "norm", "reconstruct_train", "reconstruct_val",
-        "model", "hidden_size", "layers", "total params",
-        "optimizer", "maxiter", "learning_rate", "batch_size", "patience", "iterations", "final val loss",
-        
-        # VALIDATION METRICS
-        "Val Global Open MSE", "Val Global Open R2", "Val Global Closed R2",
-
-        # TEST METRICS
-        "step MSE", "step R2", "local MSE", "local ADE",
-        "global open MSE", "global open ADE", "global open FDE", "global open R2", 
-        "global closed MSE", "global closed ADE", "global closed FDE", "global closed R2", "recursivity"
+        "date", "model_id", "run", "weight_selection", "data", "features", "targets", 
+        "window_size", "horizon", "model", "hidden_size", "layers", "total params",
+        "optimizer", "maxiter", "learning_rate", "batch_size", "iterations", "final val loss",
+        "Val Global Open R2", "Val Global Closed R2", "step R2", "global open R2", "global closed R2"
     ]
-    final_column_order = column_order + per_target_cols
-
-    ordered_row = {}
-    for col in final_column_order:
-        if col in raw_data:
-            ordered_row[col] = raw_data.pop(col) 
-            
+    
+    ordered_row = {col: raw_data.get(col, None) for col in column_order}
     for k, v in raw_data.items():
-        ordered_row[k] = v
+        if k not in ordered_row: ordered_row[k] = v
 
     df_new = pd.DataFrame([ordered_row])
 
     if os.path.exists(excel_filename):
         try:
             df_existing = pd.read_excel(excel_filename)
-            df_existing = df_existing.applymap(normalize_loaded_bools)
+            # Use map instead of applymap (deprecated in newer pandas)
+            df_existing = df_existing.map(normalize_loaded_bools)
             df_final = pd.concat([df_existing, df_new], ignore_index=True)
             df_final.to_excel(excel_filename, index=False)
         except Exception as e:
             print(f"[Warning] Excel error: {e}. Saving to CSV backup.")
-            df_new.to_csv(f"logs/classical_backup_{timestamp}.csv", index=False)
+            df_new.to_csv(os.path.join(logs_dir, f"backup_{timestamp}.csv"), index=False)
     else:
         df_new.to_excel(excel_filename, index=False)
 
-    # 4. Text Log
-    log_filename = "logs/experiment_log.txt"
-    short_feats = ", ".join(map_names(args.features, reverse=True))
-    hidden = getattr(args, 'hidden_size', 'N/A')
-    
-    log_entry = (
-        f"[{timestamp}] "
-        f"{'classical':<10} | "
-        f"F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | "
-        f"Hidden Size: {hidden:<45} | " 
-        f"Features: {short_feats} \n"
-    )
-    with open(log_filename, "a") as f:
-        f.write(log_entry)
-        
     print(f"\n[Logger] Classical model saved to {model_filename}")
-    print(f"[Logger] Stats appended to {excel_filename}")
     return model_filename
 
 def load_experiment_results(filepath, final = True):
