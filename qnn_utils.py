@@ -2056,8 +2056,12 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
       1. Top: Accumulated Error (Left Axis) vs Net Error (Right Axis).
       2. Bottom: True Trajectory of that feature.
     """
+    if not getattr(args, 'save_plot', True):
+        return # Exit immediately if saving is disabled
+
     if mode not in data: return
-    
+    if filename:
+        _ensure_dir_exists(filename)
     # 1. Setup Data
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
@@ -2182,6 +2186,7 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
         if args.save_plot and filename:
             # Construct filename: .../plot_error_vs_time_Surge_Velocity_global_closed.png
             clean_name = t_name.replace(" ", "_")
+            
             if horizon_mode != ['mean'] and horizon_mode != ['max']:
                 h_suffix = "H_" + "_".join([str(h) for h in horizon_mode_list])
             else:
@@ -2191,7 +2196,7 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
                 save_path = f"{filename}_{clean_name}_{mode}_{h_suffix}.png"
             else: 
                 save_path = f"{filename}_{clean_name}_{mode}_{loop}_{h_suffix}.png"
-            
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             
         if args.show_plot: 
