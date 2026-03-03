@@ -1,0 +1,218 @@
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: combining_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: &id001 [0.1, 0.001]
+  perturbation: 0.15
+  weights: &id002 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: &id003 [0, -1, 1]
+  - features: [sv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: &id004 [1, -1, 0]
+  - features: [yr, ya, rarad]
+    output_dim: 2
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: &id005 [0, 1, 2]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: combining_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: *id003
+  - features: [sv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: *id004
+  - features: [yr, ya, rarad]
+    output_dim: 2
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: combining_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: &id006 [0, 1, -1]
+  - features: [sv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id006
+  - features: [yr, ya, rarad]
+    output_dim: 2
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id005
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: combining_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id006
+  - features: [sv, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id006
+  - features: [yr, ya, rarad]
+    output_dim: 2
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id005
+
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: combining_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 2
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: &id007 [0, 3, 1, -1, 4, 2]
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: &id008 [-1, 0, 1, 2, 3, 4]
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: efficientsu2
+    entangle: linear
+    encoding: serial
+    map: *id008
+
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: combining_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id001
+  perturbation: 0.15
+  weights: *id002
+  initialization: identity
+  save_plot: false
+  run: 3
+  heads_config:
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 2
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id007
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id008
+  - features: [wv, sv, yr, ya, rarad]
+    output_dim: 1
+    reps: 1
+    ansatz: ugates
+    entangle: linear
+    encoding: serial
+    map: *id003
