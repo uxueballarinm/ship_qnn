@@ -62,14 +62,14 @@ def str2bool(v):
 
 
 def map_names(feature_list, reverse=False):
-    """Maps between short codes (wv) and full names (Surge Velocity)."""
+    """Maps between short codes (wv) and full names (Sway Velocity)."""
     # Central Dictionary
     code_to_name = {
-        "wv":"Surge Velocity", "sv":"Sway Velocity", 
+        "sv":"Surge Velocity", "wv":"Sway Velocity", 
         "yr":"Yaw Rate", "ya":"Yaw Angle",
         "vu": "Speed U", "radeg": "Rudder Angle (deg)",
         "rarad": "Rudder Angle (rad)", "OOD": "OOD Label",
-        "dwv":"delta Surge Velocity", "dsv":"delta Sway Velocity",
+        "dsv":"delta Surge Velocity", "dwv":"delta Sway Velocity",
         "dyr":"delta Yaw Rate", "dya":"delta Yaw Angle",
         "asv":"Abs Sway", "ararad":"Abs Rudder",
         "dasv":"delta Abs Sway", "dararad":"delta Abs Rudder",

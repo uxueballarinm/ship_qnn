@@ -129,7 +129,7 @@ if __name__ == "__main__":
     parser.add_argument('--config_file', type=str, default=None)
     parser.add_argument('--save_folder', type=str, default="classical_baselines")
     parser.add_argument('--data', type=str, default="data/reduce_row_number_absolutes")
-    parser.add_argument('--select_features', nargs='+', default=['wv','sv','yr','ya','rarad'])
+    parser.add_argument('--select_features', nargs='+', default=['sv','wv','yr','ya','rarad'])
     parser.add_argument('--window_size', type=int, default=5)
     parser.add_argument('--horizon', type=int, default=5)
     parser.add_argument('--predict', type=str, default='motion')

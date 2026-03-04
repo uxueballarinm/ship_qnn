@@ -1,0 +1,311 @@
+# ==========================================
+# RUN 2: SEED 2 (14 Experiments)
+# ==========================================
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: &lr [0.05, 0.001]
+  perturbation: 0.1
+  weights: &wt [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map1 [1, 0, 4, 2, 1, 4, 3, 2, 4]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map1
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map2 [0, 1, 4, 2, 3, 4, 1, 2, 4]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map2
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map3 [0, 4, -1, 1, 2, 3, 1, 2, 3]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map3
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map4 [0, 2, 4, 1, 3, 4, 1, 2, 3]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map5 [0, 1, 2, 3, 4, -1, -1, -1, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map5
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map6 [1, -1, -1, 2, -1, -1, 3, 0, 4]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map6
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: compact
+    map: &map7 [0, -1, 4, 1, 2, -1, 3, -1, -1]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: hypothesis_reinjection_results
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 512
+  learning_rate: *lr
+  perturbation: 0.1
+  weights: *wt
+  initialization: identity
+  save_plot: false
+  run: 2
+  heads_config:
+  - features: [sv, wv, yr, ya, rarad]
+    output_dim: 4
+    reps: 1
+    ansatz: ugates
+    entangle: reverse_linear
+    encoding: serial
+    map: *map7
