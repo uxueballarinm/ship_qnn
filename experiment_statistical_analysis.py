@@ -80,13 +80,25 @@ class QNNAnalyzer:
             self.logger(f"Error: Metric '{metric}' not found in file.")
             return
         self.df[metric] = pd.to_numeric(self.df[metric], errors='coerce')
-        clean_df = self.df[self.df[metric] > self.fail_threshold].copy()
+        if "R2" in metric:
+            clean_df = self.df[self.df[metric] > self.fail_threshold].dropna(subset=[metric]).copy()
+            sort_ascending = False  # Higher R2 is better
+        else:
+            # For MSE, a 'fail' is a massive error. Adjust threshold if needed.
+            clean_df = self.df.dropna(subset=[metric]).copy()
+            # Only keep values that are somewhat realistic (adjust if your MSE is higher than 1000)
+            clean_df = clean_df[clean_df[metric] < 1000.0]
+            sort_ascending = True   #
         
         # 1. Advanced Statistics (including SEM for sufficiency check)
         stats_table = clean_df.groupby(group_by)[metric].agg(['count', 'mean', 'median', 'std', 'max'])
         stats_table['SEM'] = stats_table['std'] / np.sqrt(stats_table['count'])
-        stats_table['Precision_Err_%'] = (1.96 * stats_table['SEM']) / stats_table['mean'].abs() * 100
-        stats_table = stats_table.sort_values('median', ascending=False)
+        stats_table['Precision_Err_%'] = np.where(
+            stats_table['mean'] != 0, 
+            (1.96 * stats_table['SEM']) / stats_table['mean'].abs() * 100, 
+            0
+        )
+        stats_table = stats_table.sort_values('median', ascending=sort_ascending)
         
         self.logger("\nSummary Statistics & Sufficiency (N=10 check):\n" + stats_table.round(4).to_string())
         # 2. SAVE TO EXCEL (Fixes the IndexError)
