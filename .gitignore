@@ -42,3 +42,4 @@ logs/**/
 # --- Heavy Data (Optional) ---
 *.h5
 *.pth
+guide-to-normality-tests-in-python.ipynb

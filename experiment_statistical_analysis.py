@@ -69,9 +69,36 @@ class QNNAnalyzer:
         name = f"{prefix}_{factors}_{metric}"[:31]
         return "".join(x for x in name if x.isalnum() or x == "_")
     def check_normality(self, data):
-        if len(data) < 3 or np.ptp(data) == 0: return False
-        _, p = stats.shapiro(data)
-        return p > 0.05
+        """
+        Performs 3 statistical normality tests as recommended by the 
+        'Beginner's Guide to Normality Tests in Python'.
+        """
+        if len(data) < 8 or np.ptp(data) == 0: 
+            return False
+        
+        alpha = 0.05
+        results = []
+
+        # 1. Shapiro-Wilk Test
+        # Best for smaller samples
+        _, p_shapiro = stats.shapiro(data)
+        results.append(p_shapiro > alpha)
+
+        # 2. D’Agostino’s K^2 Test
+        # Summarizes skewness and kurtosis
+        _, p_dagostino = stats.normaltest(data)
+        results.append(p_dagostino > alpha)
+
+        # 3. Anderson-Darling Test
+        # Returns critical values for different significance levels
+        # We check against the 5% significance level (index 2)
+        ad_result = stats.anderson(data, dist='norm')
+        is_ad_normal = ad_result.statistic < ad_result.critical_values[2]
+        results.append(is_ad_normal)
+
+        # Consensus: Data is considered normal if the majority of tests pass
+        # This provides the 'triangulation' recommended by the guide
+        return sum(results) >= 2
 
     def run_study(self, group_by, metric):
         header = f"\n{'='*75}\nSTUDY: {metric} by {group_by}\n{'='*75}"
@@ -116,7 +143,7 @@ class QNNAnalyzer:
             
             for other in stats_table.index[1:]:
                 d_other = clean_df[clean_df[group_by] == other][metric]
-                if len(d_other) < 2: continue
+                if len(d_other) < 8: continue
                 
                 # Selection logic
                 if is_best_normal and self.check_normality(d_other):
