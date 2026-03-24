@@ -1,0 +1,360 @@
+#Run 0
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: &id001 [sv, wv, yr, ya, rarad]
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: &id002 [0.2, 0.01]
+  perturbation: 0.05
+  weights:  &id003 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 0
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: &id004 [sv, wv, yr, ya, rarad]
+    output_dim: 2
+    map: &id007 [4, 2, 3, 0, 1, -1]
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: &id008 [4, 0, 1, 2, 3, -1]
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+#Run 1
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 1
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+#Run 2
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 2
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+#Run 3
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 3
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+
+
+#Run 4
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+
+
+#Run 5
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 5
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+
+#Run 6
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 6
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+
+
+#Run 7
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 7
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+
+
+#Run 8
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 8
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+
+
+
+#Run 9
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_2_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.05
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+  - features: *id004
+    output_dim: 2
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear
+  - features: *id004
+    output_dim: 2
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: efficientsu2
+    entangle: linear

@@ -3,10 +3,10 @@ import glob
 import os
 
 def merge_backups():
-    excel_path = "logs\hypothesis_reinjection_results\experiments_summary.xlsx"
+    excel_path = "logs/3_head_model_systematic_experiments/experiments_summary.xlsx"
     
     # 1. Find all backup CSV files
-    backup_files = glob.glob("logs\\backup_03-01_11-03-20.csv")
+    backup_files = glob.glob("logs/backup_03-23_21-14-31.csv")
     
     if not backup_files:
         print("No backup files found in 'logs/'.")

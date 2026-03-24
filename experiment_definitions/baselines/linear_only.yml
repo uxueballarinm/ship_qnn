@@ -1,0 +1,30 @@
+- run: 0
+  model: "classical"
+  save_dir: "baselines/linear_spsa_check"
+  
+  # Data Configuration (Exact match to Quantum)
+  data: data/reduce_row_number_absolutes
+  select_features: [sv, wv, yr, ya, rarad]
+  window_size: 5
+  horizon: 5
+  predict: motion
+  
+  # Architecture: This creates Input -> Linear -> Tanh -> Linear -> Output
+  # With hidden_size 4, it acts as a linear bottleneck.
+  num_layers: 1
+  hidden_size: 4
+  
+  # Optimization (Exact match to Quantum)
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: [0.1, 0.001]  # Dynamic Learning Rate
+  perturbation: 0.15
+  weights: [1.0, 1.0, 1.0, 1.0]
+  initialization: uniform     # Standard random start for weights
+  
+  # # Convergence Logic
+  # validate_all: true          # Set to true to use the full 400-point thesis check
+  # convergence_stop: true
+  # convergence_window: 200     # The N for mu1, mu2, sigma2
+  # save_plot: false

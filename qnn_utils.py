@@ -312,9 +312,13 @@ def _load_and_validate_map(args, config):
 def _get_encoding_config(args):
     """Calculates circuit dimensions."""
     num_features = len(args.features)
-    if len(args.map) % 3 != 0:
-        raise ValueError(f"Map length ({len(args.map)}) must be a multiple of 3.")
-    num_ugates = len(args.map) // 3
+    raw_map = getattr(args, 'map', None)
+    if raw_map is None:
+        num_ugates = math.ceil(num_features / 3)
+    else:
+        if len(raw_map) % 3 != 0:
+            raise ValueError(f"Map length ({len(raw_map)}) must be a multiple of 3.")
+    num_ugates = len(raw_map) // 3
     total_slots = num_ugates * 3
     if args.encoding == 'compact':
         qubits_per_step, num_qubits, sub_layers = 1, args.window_size, 1
@@ -443,6 +447,8 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
         ansatz_obj = RealAmplitudes(num_qubits=config["num_qubits"], reps=0)
         config["weights_per_layer"] = len(ansatz_obj.parameters)
     qc = QuantumCircuit(config["num_qubits"])
+    if args.use_hadamard:
+        for i in range(config["num_qubits"]): qc.h(i) # Initial Layer of Hadamards
     input_params = ParameterVector('θ', args.window_size * config["num_features"])
     weight_params = ParameterVector('ω', config["total_physical_layers"] * config["weights_per_layer"])
     rng = np.random.default_rng(args.run)
@@ -525,46 +531,93 @@ class WindowEncodingQNN: # Numpy version
         c_params = self.rng.uniform(-limit, limit, size=self.num_c_params) # xavier/glorot initialization
         return np.concatenate([q_params, c_params])
 
-class ClassicalLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, output_size = None, seed=42):
+class ClassicalMLP(nn.Module):
+    def __init__(self, input_size, window_size, hidden_size, num_layers, output_size = None, seed=42):
         super().__init__()
         torch.manual_seed(seed)
-        
-        # LSTM Layer
-        # input_shape: (Batch, Seq_Len, Features)
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # Readout Layer
-        self.fc = nn.Linear(hidden_size, output_size,device=self.device)
+        flat_input_dim = input_size * window_size
+        layers = []
+        layers.append(nn.Linear(flat_input_dim, hidden_size))
+        layers.append(nn.Tanh())
+        for _ in range(num_layers - 1):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(nn.Tanh())
+        layers.append(nn.Linear(hidden_size, output_size))
+        self.network = nn.Sequential(*layers).to(self.device)
     def forward(self, x):
         # x shape: (Batch, Window_Size, Features)
-        # lstm_out shape: (Batch, Window_Size, Hidden_Size)
-        lstm_out, _ = self.lstm(x)
-        
-        # We take the output of the LAST time step in the window to predict the future
-        last_time_step = lstm_out[:, -1, :] 
-        
-        out = self.fc(last_time_step)
+        x_flat = x.view(x.size(0), -1) # Flatten the window
+        out = self.network(x_flat)
         return out
+
+
+# class ClassicalLSTM(nn.Module):
+#     def __init__(self, input_size, hidden_size, num_layers, output_size = None, seed=42):
+#         super().__init__()
+#         torch.manual_seed(seed)
+        
+#         # LSTM Layer
+#         # input_shape: (Batch, Seq_Len, Features)
+#         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
+#         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#         # Readout Layer
+#         self.fc = nn.Linear(hidden_size, output_size,device=self.device)
+#     def forward(self, x):
+#         # x shape: (Batch, Window_Size, Features)
+#         # lstm_out shape: (Batch, Window_Size, Hidden_Size)
+#         lstm_out, _ = self.lstm(x)
+        
+#         # We take the output of the LAST time step in the window to predict the future
+#         last_time_step = lstm_out[:, -1, :] 
+        
+#         out = self.fc(last_time_step)
+#         return out
     
 class ClassicalWrapper:
     def __init__(self, torch_model, device,output_shape = None):
         self.model = torch_model
         self.device = device
-        self.num_targets = output_shape[2] if output_shape else 2
+        self.num_targets = output_shape[2] if output_shape else 4
+    def initialize_parameters(self, method='uniform'):
+        """
+        Mimics the QNN initialization for a fair comparison.
+        """
+        # Get total number of parameters
+        total_params = sum(p.numel() for p in self.model.parameters())
+        
+        if method == 'uniform':
+            # Initialize between -pi and pi to match quantum rotation ranges
+            weights = np.random.uniform(-np.pi, np.pi, total_params)
+        elif method == 'identity':
+            weights = np.zeros(total_params)
+        else:
+            weights = np.random.randn(total_params) * 0.1
             
-    def forward(self, x, params):
-        # params is actually the state_dict which we load
-        self.model.load_state_dict(params)
-        self.model.to(self.device)
+        # Apply these weights to the torch model
+        self.set_weights(weights)
+        return weights
+    def get_weights(self):
+        # Flatten all parameters into a single numpy array for SPSA
+        return torch.cat([p.flatten() for p in self.model.parameters()]).detach().cpu().numpy()
+    def set_weights(self, weights):
+        # Reshape numpy array back into the torch model's parameters
+        weights = np.clip(weights, -5.0, 5.0) 
+        weights_tensor = torch.tensor(weights, dtype=torch.float32).to(self.device)
+        ptr = 0
+        for p in self.model.parameters():
+            numel = p.numel()
+            p.data.copy_(weights_tensor[ptr:ptr + numel].view(p.shape))
+            ptr += numel
+    def forward(self, x, weights=None):
+        if weights is not None:
+            self.set_weights(weights)
         self.model.eval()
         t_x = torch.tensor(x, dtype=torch.float32).to(self.device)
-        with torch.no_grad(): out = self.model(t_x)
-        total_out = out.shape[1]
-        horizon = total_out // self.num_targets
-        
-        return out.cpu().numpy().reshape(x.shape[0], horizon, self.num_targets)
-
+        with torch.no_grad():
+            out = self.model(t_x)
+        # Reshape to (Batch, Horizon, Targets)
+        return out.cpu().numpy().reshape(x.shape[0], -1, self.num_targets)
 # Add/Replace in utils.py
 
 class MultiHeadQNN:
@@ -614,6 +667,192 @@ class MultiHeadQNN:
         # Initialize each head and concatenate
         params_list = [m.initialize_parameters(strategy) for m in self.models]
         return np.concatenate(params_list)
+# class ConvergenceReached(Exception):
+#     """Custom exception to interrupt the optimizer when thesis criteria are met."""
+#     pass
+# def convergence_check(unique_history, convergence_window):
+#     if len(unique_history) < 2 * convergence_window:
+#         return False
+#     # Implementation for convergence checking
+#     recent = unique_history[-(2 * convergence_window):]
+#     w1 = recent[:convergence_window]
+#     w2 = recent[convergence_window:]
+    
+#     mu1, mu2, sigma2 = np.mean(w1), np.mean(w2), np.std(w2) #
+    
+#     # Thesis formula: |mu1 - mu2| < sigma2 / (2 * sqrt(N))
+#     threshold = sigma2 / (2 * np.sqrt(convergence_window))
+    
+#     return abs(mu1 - mu2) < threshold #
+
+# def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
+#     num_targets = target.shape[-1]
+    
+#     # Safety: If output dim changes, revert to equal weights to prevent crash
+#     if len(weights) != num_targets:
+#         weights = np.ones(num_targets)
+#     if reconstruct and scaler:
+
+#         target_real = scaler.inverse_transform(target.reshape(-1, num_targets)).reshape(target.shape)
+#         pred_real = scaler.inverse_transform(pred.reshape(-1, num_targets)).reshape(pred.shape)
+
+#         if args.predict == 'delta':
+#             target_traj = np.cumsum(target_real, axis=1)
+#             pred_traj = np.cumsum(pred_real, axis=1)
+#             sq_diff = (pred_traj - target_traj) ** 2
+#             weighted_diff = sq_diff * weights  # Broadcasting applies weight to last axis
+#             return np.mean(weighted_diff)
+#             # return np.mean((pred_traj - target_traj) ** 2)
+        
+#         else: 
+#             # Weighted MSE for Real Values
+#             sq_diff = (pred_real - target_real) ** 2
+#             weighted_diff = sq_diff * weights
+#             return np.mean(weighted_diff)
+#             # return np.mean((pred_real - target_real) ** 2)
+
+#     else:
+#         if reconstruct and not scaler: print(f'{C_YELLOW}WARNING: Scaler missing --> Cannot reconstruct trajectory.{C_RESET}')
+#         sq_diff = (pred - target) ** 2
+        
+#         # Apply Weights:
+#         # If Surge error is 0.01 -> becomes 0.1 (Visible to optimizer)
+#         # If Sway error is 0.01 -> stays 0.01
+#         weighted_diff = sq_diff * weights
+        
+#         return np.mean(weighted_diff)
+#         # return np.mean((pred - target) ** 2)
+
+# def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
+
+#     best_val_loss = float('inf')
+#     best_params = None
+    
+#     train_history, val_history = [], []
+#     unique_val_history = [] # For convergence checking (stores only unique values)
+    
+#     optimizer_name = args.optimizer.upper()
+#     # Use default 32 if not specified in args
+#     batch_size = getattr(args, 'batch_size', 32)
+#     use_batching = (optimizer_name == 'SPSA') and (batch_size < x_train.shape[0])
+    
+#     num_train_samples = x_train.shape[0]
+#     learning_rate_arg = args.learning_rate
+#     if optimizer_name == 'SPSA':
+#         if isinstance(learning_rate_arg,list) and len(learning_rate_arg) == 2:
+#             lr_start, lr_end = learning_rate_arg
+#             print(f"[Optimizer] Dynamic SPSA Learning Rate: {lr_start} -> {lr_end}")
+            
+#             def get_lr_at_k(k):
+#                 progress = min(k, args.maxiter) / args.maxiter
+#                 return lr_start - (lr_start - lr_end) * progress
+            
+#             # 2. Generator Factory (Used for OPTIMIZER only)
+#             # SPSA calls this. It needs no arguments. It yields values forever.
+#             def lr_generator_factory():
+#                 k = 0
+#                 while True:
+#                     yield get_lr_at_k(k)
+#                     k += 1
+            
+#             # ASSIGN THE FUNCTIONS, DO NOT CALL THEM
+#             spsa_lr_optimizer = lr_generator_factory
+#             spsa_learning_rate = get_lr_at_k
+#         else:
+#             # Handle standard float case
+#             val = learning_rate_arg[0] if isinstance(learning_rate_arg, list) else learning_rate_arg
+#             print(f"[Optimizer] Static SPSA Learning Rate: {val}")
+#             def static_generator():
+#                 while True: yield float(val)
+#             spsa_lr_optimizer = static_generator
+#             spsa_learning_rate = lambda k: float(val)
+#     current_batch_x = None
+#     current_batch_y = None
+#     call_counter = 0
+#     def objective_function(params):
+#         nonlocal best_val_loss, best_params, current_batch_x, current_batch_y, call_counter
+#         if use_batching:
+#             if call_counter % 2 == 0:
+#                 indices = np.random.choice(num_train_samples, size=batch_size, replace=False)
+#                 current_batch_x, current_batch_y = x_train[indices], y_train[indices]
+            
+#             x_input, y_target = current_batch_x, current_batch_y
+#         else:
+#             x_input,y_target = x_train, y_train
+#         call_counter += 1
+#         preds = model.forward(x_input, params)
+#         train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train,args.weights, scaler)
+#         current_iter = call_counter // 2 if optimizer_name == 'SPSA' else call_counter
+#         # Determine if we validate this step
+#         if getattr(args, 'validate_all', False):
+#             check_val = True
+#         else:
+#             # Validate every 50 iterations
+#             check_val = (current_iter % 50 == 0)
+
+#         if check_val:
+#             val_preds = model.forward(x_val, params)
+#             val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, args.weights, scaler)
+#             if val_mse < best_val_loss:
+#                 best_val_loss = val_mse
+#                 best_params = np.copy(params) #NOTE: Usually final weights are better
+#             unique_val_history.append(val_mse)
+#             if getattr(args, 'convergence_stop', False):
+#                 c_win = args.convergence_window if args.validate_all else 20
+#                 if convergence_check(unique_val_history, convergence_window=c_win):
+#                     raise ConvergenceReached(f"Converged after {len(unique_val_history)} validation checks.")
+#         else:
+#             val_mse = val_history[-1] if val_history else train_mse
+#         if optimizer_name == 'SPSA':
+#             if call_counter % 2 == 0:
+#                 train_history.append(train_mse)
+#                 val_history.append(val_mse)
+
+#                 log_interval = 100
+#                 if len(train_history) % log_interval == 0:
+#                     if spsa_learning_rate:
+#                         lr_val = spsa_learning_rate(len(train_history))
+#                         lr_str = f" {lr_val:.5f}"
+#                     else:
+#                         lr_str = "N/A"
+#                     print(f"  > Iter {len(train_history):4d} | Train: {train_mse:.5f} | Val: {val_mse:.5f} | LR: {lr_str}")
+#         else:
+#             train_history.append(train_mse); val_history.append(val_mse)
+
+#             log_interval = 100 if use_batching else 50
+#             if len(train_history) % log_interval == 0:
+#                 print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
+#         return train_mse
+   
+
+#     start_time = time.time()
+#     print(f"\n[Training] Starting {args.optimizer.upper()} optimization...")
+#     if use_batching:
+#         print(f"  > Mode: Mini-Batch (Size: {batch_size})")
+#     else:
+#         print(f"  > Mode: Full-Batch (Size: {num_train_samples})")
+#     initial_weights = model.initialize_parameters(args.initialization)
+#     try:
+#         if args.optimizer.upper() == 'COBYLA':
+#             opt = COBYLA(maxiter=args.maxiter, tol = args.tolerance)
+#             res = opt.minimize(fun=objective_function, x0=initial_weights)
+#         elif args.optimizer.upper() == 'SPSA':
+#             opt = SPSA(maxiter=args.maxiter,learning_rate=spsa_lr_optimizer, perturbation=args.perturbation) 
+#             res = opt.minimize(fun=objective_function, x0=initial_weights)
+#         else:
+#             raise ValueError(f"Optimizer {optimizer_name} not supported.")
+#     except ConvergenceReached as e:
+#         print(f"\n{C_GREEN}[Success] {e}{C_RESET}")
+#         # Create a mock result object so 'res.x' exists for the return block
+#         res = argparse.Namespace(x=best_params)
+#     print(f"Training completed in {(time.time() - start_time) / 60:.2f} min.")
+#     # Fallback if best_params never updated (rare)
+#     if best_params is None: best_params = res.x
+
+#     return {
+#         "best_weights": best_params, "best_val_loss": best_val_loss, "final_weights": res.x,             
+#         "train_history": train_history, "val_history": val_history,         
+#     }
 
 
 def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
@@ -770,6 +1009,7 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         "best_weights": best_params, "best_val_loss": best_val_loss, "final_weights": res.x,             
         "train_history": train_history, "val_history": val_history,         
     }
+
 
 
 def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler = None, device='cpu'):
@@ -1631,10 +1871,27 @@ def load_experiment_results(filepath, final = True):
             config['model'] = 'classical_lstm'
         else:
             config['model'] = 'N/A'
-
+    def resolve_multi_val(values_list):
+        if not values_list: return 'N/A'
+        if all(str(x) == str(values_list[0]) for x in values_list):
+            return str(values_list[0]) 
+        return "|".join(map(str, values_list))
+    is_multi = config.get('model') == 'multihead'
+    heads = config.get('heads_config', [])
+    if is_multi and isinstance(heads, list):
+        summary_params = {
+            'reps': resolve_multi_val([h.get('reps', config.get('reps')) for h in heads]),
+            'ansatz': resolve_multi_val([h.get('ansatz', config.get('ansatz')) for h in heads]),
+            'entangle': resolve_multi_val([h.get('entangle', config.get('entangle')) for h in heads]),
+            'encoding': resolve_multi_val([h.get('encoding', config.get('encoding')) for h in heads]),
+            'map': resolve_multi_val([h.get('map', config.get('map')) for h in heads])
+        }
+    else:
+        # Standard fallback for vanilla models
+        summary_params = {k: str(config.get(k, 'N/A')) for k in ['reps', 'ansatz', 'entangle', 'encoding', 'map']}
     # --- Print Summary Header ---
     print("\n" + "="*120)
-    print(f"EXPERIMENT SUMMARY")
+    print(f"EXPERIMENT SUMMARY {'(MULTI-HEAD)' if is_multi else ''}")
     print("="*120)
     fname = os.path.basename(filepath)
     try:
@@ -1661,13 +1918,14 @@ def load_experiment_results(filepath, final = True):
         keys_to_show.extend(quantum_keys)
 
     for k in keys_to_show:
-        val = config.get(k, 'N/A')
-        if isinstance(val, list) and k == 'features':
-            val = f"{len(val)} features"
-        elif isinstance(val, list):
-            val = str(val)
+        if k in summary_params:
+            val = summary_params[k]
+        else:
+            val = config.get(k, 'N/A')
+            if k == 'features' and isinstance(val, list): val = f"{len(val)} features"
         print(f"{k:<15}: {val}")
-    
+    if is_multi:
+        print(f"{'head_number':<15}: {len(heads)}")
     # --- Performance Table (Aggregate) ---
     print("\n--- Aggregate Performance (Final Weights) ---")
     
@@ -1688,14 +1946,7 @@ def load_experiment_results(filepath, final = True):
         print("\n--- Detailed Breakdown per Target (All Phases) ---")
         
         # Define Columns
-        headers = [
-            "TARGET", 
-            "Step MSE",
-            "Step R2",
-            "Loc MSE", 
-            "Open MSE", "Open R2",
-            "Clos MSE", "Clos R2",
-        ]
+        headers = ["TARGET", "Step MSE", "Step R2", "Loc MSE", "Open MSE", "Open R2", "Clos MSE", "Clos R2"]
         
         # Print Header
         # Adjust spacing: 16 for name, 9 for short numbers

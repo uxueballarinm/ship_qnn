@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 from statsmodels.graphics.gofplots import qqplot
+from statsmodels.stats.diagnostic import lilliefors as lilliefors_test
 import warnings
 import os
 import argparse
@@ -73,25 +74,25 @@ class QNNAnalyzer:
         results.append(is_sw_normal)
         self.logger(f"   Shapiro-Wilk: p={p_sw:.4f} -> {'NORMAL' if is_sw_normal else 'NOT NORMAL'}")
 
-        # 2. D’Agostino’s K^2 (Requires N >= 8)
-        if len(data) >= 8:
-            stat_da, p_da = stats.normaltest(data)
+        # 2. Lillieford (Requires N >= 3)
+        if len(data) >= 4:
+            stat_da, p_da = lilliefors_test(data)    
             is_da_normal = p_da > alpha
             results.append(is_da_normal)
-            self.logger(f"   D’Agostino K^2: p={p_da:.4f} -> {'NORMAL' if is_da_normal else 'NOT NORMAL'}")
-        else:
-            results.append(True) # Treat as pass if sample too small for this test
+            self.logger(f"   Lillieford: p={p_da:.4f} -> {'NORMAL' if is_da_normal else 'NOT NORMAL'}")
 
         # 3. Anderson-Darling (5% significance level)
-        ad_res = stats.anderson(data, dist='norm')
-        is_ad_normal = ad_res.statistic < ad_res.critical_values[2]
-        results.append(is_ad_normal)
-        self.logger(f"   Anderson-Darling: Stat={ad_res.statistic:.3f} (CV 5%={ad_res.critical_values[2]}) -> {'NORMAL' if is_ad_normal else 'NOT NORMAL'}")
-
+        if len(data) >= 5:
+            ad_res = stats.anderson(data, dist='norm')
+            is_ad_normal = ad_res.statistic < ad_res.critical_values[2]
+            results.append(is_ad_normal)
+            self.logger(f"   Anderson-Darling: Stat={ad_res.statistic:.3f} (CV 5%={ad_res.critical_values[2]}) -> {'NORMAL' if is_ad_normal else 'NOT NORMAL'}")
         # Consensus: 2 out of 3 pass
-        is_gaussian = sum(results) >= 2
+        num_passed = sum(results)
+        num_run = len(results)
+        is_gaussian = num_passed > (num_run / 2)
         final_status = "NORMAL (Gaussian)" if is_gaussian else "NOT NORMAL (Non-Gaussian)"
-        self.logger(f"   FINAL STATUS: {final_status}")
+        self.logger(f"   FINAL STATUS: {final_status} ({num_passed}/{num_run} passed)")
         return is_gaussian
 
     def run_study(self, group_by, metric):

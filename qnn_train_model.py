@@ -1,49 +1,51 @@
 from qnn_utils import *
 import yaml
+import re
+from copy import deepcopy
 
 def run(args):
     timestamp = datetime.datetime.now().strftime("%m-%d_%H-%M-%S")
+    
+    # 1. SEARCH FOR EXISTING EXPERIMENT (.pkl)
     found_path, saved_data = find_existing_experiment(args)
-    # Fix seed
-    if found_path is not None:
-        print(f"\n{C_GREEN}>> SKIPPING TRAINING: Experiment already exists.{C_RESET}")
-        print(f"   Source: {found_path}")
-        print(f"   Target: logs/{getattr(args, 'save_dir', '')}/experiments_summary.xlsx")
+    
+    if found_path is not None and args.check_existing:
+        print(f"\n{C_GREEN}>> MATCH FOUND: {found_path}{C_RESET}")
         
-        # Extract necessary objects to mimic a fresh run result
-        # Note: We need to reconstruct scalers to save them correctly to the new location if needed
-        # but save_experiment_results expects them.
+        # Check your new flag
+        if not getattr(args, 'save_in_excel', True):
+            print(f"{C_YELLOW}>> Flag '--save_in_excel' is False. Skipping without logging or copying.{C_RESET}")
+            return # EXIT HERE: Move to the next experiment in the YAML
+            
+        # If save_in_excel is True, proceed with the "Sync" to Excel/Model folder
+        print(f"{C_BLUE}>> Syncing results to Excel and models folder...{C_RESET}")
+        
         saved_config = saved_data.get('config', {})
-        # If the current args is missing features or targets, take them from the pkl
-        if not hasattr(args, 'features'):
-            args.features = saved_config.get('features', [])
-        if not hasattr(args, 'targets'):
-            args.targets = saved_config.get('targets', [])
-        if not hasattr(args, 'data_n'):
-            args.data_n = saved_config.get('data_n', 'N/A')
+        for attr in ['features', 'targets', 'data_n', 'data_dt']:
+            if not hasattr(args, attr):
+                setattr(args, attr, saved_config.get(attr))
+        
         train_res = {
-            'selected_weights': saved_data.get('selected_weights', saved_data.get('best_weights', saved_data.get('final_weights'))),
+            'selected_weights': saved_data.get('selected_weights', saved_data.get('best_weights')),
             'final_weights': saved_data.get('final_weights'),
             'train_history': saved_data.get('train_history', []),
             'val_history': saved_data.get('val_history', [])
         }
-        val_eval = {'metrics': saved_data.get('val_metrics', {})}
-        test_eval = {'metrics': saved_data.get('test_metrics', {})}
-        scalers = [saved_data['x_scaler'], saved_data['y_scaler']]
-        qnn_structure = saved_data['qnn_structure']
         
-        # CALL SAVE FUNCTION to paste this data into the NEW folder/excel
-        # We reuse the original timestamp from the loaded file or generate a new one?
-        # Better to generate a new one so filenames don't conflict, OR assume identical filenames are fine.
-        # Let's use the CURRENT timestamp to indicate when this "copy" happened.
-        final_selection_type = saved_data.get('weight_selection_method', 'Unknown')
-        model_filename = save_experiment_results(
-            args, train_res, val_eval, test_eval, scalers, qnn_structure, 
-            timestamp, # New timestamp for the copy
-            selection_type=final_selection_type, 
-            excel_path=None # Will use args.save_dir logic
+        save_experiment_results(
+            args, train_res, 
+            {'metrics': saved_data.get('val_metrics', {})}, 
+            {'metrics': saved_data.get('test_metrics', {})}, 
+            [saved_data['x_scaler'], saved_data['y_scaler']], 
+            saved_data['qnn_structure'], 
+            timestamp, 
+            selection_type=saved_data.get('weight_selection_method', 'Unknown')
         )
-        return # EXIT FUNCTION EARLY
+        return # Move to the next experiment
+
+    # 2. START TRAINING (Only if no .pkl was found)
+    print(f"\n{C_BLUE}--- Starting New Training ---{C_RESET}")
+
     seed = args.run
     random.seed(seed)
     np.random.seed(seed)
@@ -228,6 +230,7 @@ if __name__=="__main__":
 
     # Data structure
     parser.add_argument('--config', type=str, default=None, help="Path to YAML config file") 
+    parser.add_argument('--indices', type=int, nargs='+', default=None, help="Specific indices of experiments to run from the YAML file (1-based, e.g., --indices 1 3 5)")
     parser.add_argument('--save_dir', type=str, default="", help="Subfolder for output")
     parser.add_argument('--run', type=int, default=0)
 
@@ -240,7 +243,7 @@ if __name__=="__main__":
     parser.add_argument('-y', '--horizon', type=int, default=5) # 1,3,5
     
     # Target Options
-    parser.add_argument('--predict', type=str, default='delta', choices=['delta', 'motion','motion_without_surge'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
+    parser.add_argument('--predict', type=str, default='motion', choices=['delta', 'motion','motion_without_surge'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
     parser.add_argument('--norm', type = str2bool, default=True, choices = [True, False], help="Normalize targets to [-1, 1]") # Don't normalize NOTE maybe normalize for a classical layer that goes before the redout if we add 
     parser.add_argument('-rt', '--reconstruct_train', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
     parser.add_argument('-rv', '--reconstruct_val', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
@@ -267,7 +270,13 @@ if __name__=="__main__":
     
     parser.add_argument('--show_plot', type = str2bool, default=False)
     parser.add_argument('--save_plot', type = str2bool, default=True)
-   
+    parser.add_argument('--check_existing', type = str2bool, default=False, help="If True, checks for existing experiment with same config and loads results instead of retraining.")
+    parser.add_argument('--save_in_excel', type=str2bool, default=False, help="If False, found experiments won't be logged to Excel or copied to the models folder.")
+    parser.add_argument('--use_hadamard', type = str2bool, default=False, help="If True, applies Hadamard gates to all qubits at the start of the circuit for better initial state superposition.")
+    # # Convergence checking
+    # parser.add_argument('--convergence_window', type=int, default=200, help="Statistical window for convergence check (Thesis uses 200)")
+    # parser.add_argument('--validate_all', type=str2bool, default=False, help="True: validate every iteration. False: validate every 50 iterations.")
+    # parser.add_argument('--convergence_stop', type=str2bool, default=False, help="If True, stop training when thesis convergence criteria is met.")
     args = parser.parse_args()
     if args.config:
         with open(args.config, 'r') as f:
@@ -279,6 +288,9 @@ if __name__=="__main__":
             config_list = config_content
         print(f"Loaded {len(config_list)} experiments from YAML.")
         for i, config_dict in enumerate(config_list):
+            exp_idx = i + 1 # 1-based indexing for the user
+            if args.indices and exp_idx not in args.indices:
+                continue
             print(f"\n--- Running Experiment {i+1}/{len(config_list)} ---")
                 
             # Merge CLI args with YAML config

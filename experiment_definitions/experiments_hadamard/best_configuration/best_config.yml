@@ -1,0 +1,225 @@
+#Run 0
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_3_head_with_hadamard
+  select_features: &id001 [sv, wv, yr, ya, rarad]
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: &id002 [0.2, 0.005]
+  perturbation: 0.1
+  weights:  &id003 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  encoding: serial
+  run: 0
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+    - features: [sv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, -1]
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, -1]
+    - features: [yr, ya, rarad]
+      output_dim: 2
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, 2]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_3_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.1
+  weights:  *id003
+  initialization: identity
+  save_plot: false
+  encoding: serial
+  run: 0
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+    - features: [sv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [-1 ,1, 0]
+      
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [-1 ,1, 0]
+    - features: [yr, ya, rarad]
+      output_dim: 2
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [2 ,1, 0]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_3_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.1
+  weights:  *id003
+  initialization: identity
+  save_plot: false
+  encoding: serial
+  run: 1
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+    - features: [sv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, -1]
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, -1]
+    - features: [yr, ya, rarad]
+      output_dim: 2
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, 2]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_3_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.1
+  weights:  *id003
+  initialization: identity
+  save_plot: false
+  encoding: serial
+  run: 1
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+    - features: [sv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [-1 ,1, 0]
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [-1 ,1, 0]
+    - features: [yr, ya, rarad]
+      output_dim: 2
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [2 ,1, 0]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_3_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.1
+  weights:  *id003
+  initialization: identity
+  save_plot: false
+  encoding: serial
+  run: 2
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+    - features: [sv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, -1]
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, -1]
+    - features: [yr, ya, rarad]
+      output_dim: 2
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [0 ,1, 2]
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: try_3_head_with_hadamard
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.1
+  weights:  *id003
+  initialization: identity
+  save_plot: false
+  encoding: serial
+  run: 2
+  check_existing: false
+  use_hadamard: true
+  heads_config:
+    - features: [sv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [-1 ,1, 0]
+    - features: [wv, rarad]
+      output_dim: 1
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [-1 ,1, 0]
+    - features: [yr, ya, rarad]
+      output_dim: 2
+      reps: 1
+      ansatz: ugates
+      entangle: linear
+      map: [2 ,1, 0]

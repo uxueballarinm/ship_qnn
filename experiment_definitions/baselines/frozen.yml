@@ -1,0 +1,22 @@
+- run: 0
+  model: multihead
+  data: data/reduce_row_number_absolutes
+
+  freeze_qnn: true   # <--- The new magic flag
+  save_dir: baselines/1_head_frozen_check
+  
+  # Keep all your SPSA/Dynamic LR settings identical to the full QNN run
+  optimizer: spsa
+  maxiter: 4000
+  learning_rate: [0.1, 0.001]
+  batch_size: 256
+  
+  # Architecture (Must match your full QNN experiment)
+  heads_config:
+    - features: &id004 [sv, wv, yr, ya, rarad]
+      output_dim: 4
+      map: &id005 [1, 4, 0, 2, 3, -1]
+      reps: 1
+      encoding: serial
+      ansatz: efficientsu2
+      entangle: linear

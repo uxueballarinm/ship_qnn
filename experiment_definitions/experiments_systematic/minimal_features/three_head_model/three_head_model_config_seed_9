@@ -1,0 +1,946 @@
+#Run 0
+## Combination 1
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: &id001 [sv, wv, yr, ya, rarad]
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: &id002 [0.1, 0.001]
+  perturbation: 0.15
+  weights: &id003 [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: &id004 [sv,rarad]
+    output_dim: 1
+    map: &id007 [0, 1, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: &id005 [wv,rarad]
+    output_dim: 1
+    map: &id008 [0, 1, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: &id006 [yr, ya, rarad]
+    output_dim: 2
+    map: &id009 [0, 1, 2]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+## Combination 2
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: &id0010 [1, 0, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id009
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+## Combination 3
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: &id0011 [1, 0, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id009
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+## Combination 4
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: &id0012 [2, 0, 1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+## Combination 5
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0012
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+##Combination 6
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0012
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+
+##Combination 7
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id009
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+##Combination 8
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id0013
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id0014
+    output_dim: 2
+    map: *id0012
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+## Combination 9
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: &id0013 [0, 2, -1, 1, 2, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+## Combination 10
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0013
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+## Combination 11
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0013
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  
+## Combination 12
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0013
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+## Combination 13
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: &id0014 [2, 0, -1, 1, 2, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0014
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0014
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0014
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+##Combination 13
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: &id0015 [0, 2, -1, 2, 1, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0015
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0015
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0015
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+##Combination 14
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id005
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id008
+    output_dim: 2
+    map: &id0016 [2, 0, -1, 1, 2, -1]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+
+## Combination 15
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0016
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+##Combination 16
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0016
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+
+##Combination 17
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 9
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0016
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
