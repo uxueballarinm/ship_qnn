@@ -116,7 +116,45 @@
     encoding: serial
     ansatz: ugates
     entangle: linear
-
+## Combination 3
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  check_existing: false
+  heads_config:
+  - features: *id004
+    output_dim: 1
+    map: *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id009
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
 ## Combination 4
 - window_size: 5
   data: data/reduce_row_number_absolutes
@@ -272,13 +310,54 @@
     entangle: linear
   - features: *id006
     output_dim: 2
-    map: *id009
+    map: *id0012
     reps: 1
     encoding: serial
     ansatz: ugates
     entangle: linear
 
-##Combination 8
+
+## Combination 18
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map: *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: &id0017 [1, 2, 0]
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+## Combination 19
 - window_size: 5
   data: data/reduce_row_number_absolutes
   save_dir: 3_head_model_systematic_experiments_reduced_features
@@ -303,20 +382,102 @@
     encoding: serial
     ansatz: ugates
     entangle: linear
-  - features: *id0013
+  - features: *id005
+    output_dim: 1
+    map: *id008
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0017
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
+##Combination 20
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id007
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
     output_dim: 1
     map: *id0011
     reps: 1
     encoding: serial
     ansatz: ugates
     entangle: linear
-  - features: *id0014
+  - features: *id006
     output_dim: 2
-    map: *id0012
+    map: *id0017
     reps: 1
     encoding: serial
     ansatz: ugates
     entangle: linear
+
+
+##Combination 21
+- window_size: 5
+  data: data/reduce_row_number_absolutes
+  save_dir: 3_head_model_systematic_experiments_reduced_features
+  select_features: *id001
+  model: multihead
+  predict: motion
+  optimizer: spsa
+  maxiter: 4000
+  batch_size: 256
+  learning_rate: *id002
+  perturbation: 0.15
+  weights: *id003
+  initialization: identity
+  save_plot: false
+  run: 4
+  check_existing: false
+  heads_config:  
+  - features: *id004
+    output_dim: 1
+    map:  *id0010
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id005
+    output_dim: 1
+    map: *id0011
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+  - features: *id006
+    output_dim: 2
+    map: *id0017
+    reps: 1
+    encoding: serial
+    ansatz: ugates
+    entangle: linear
+
 
 ## Combination 9
 - window_size: 5
@@ -803,19 +964,19 @@
   heads_config:  
   - features: *id004
     output_dim: 1
-    map: *id005
+    map: *id007
     reps: 1
     encoding: serial
     ansatz: ugates
     entangle: linear
   - features: *id005
     output_dim: 1
-    map: *id007
+    map: *id008
     reps: 1
     encoding: serial
     ansatz: ugates
     entangle: linear
-  - features: *id008
+  - features: *id006
     output_dim: 2
     map: &id0016 [2, 0, -1, 1, 2, -1]
     reps: 1
