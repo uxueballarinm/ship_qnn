@@ -21,14 +21,14 @@
     map: &id005 [0, -1, 2, 1, -1, 2]
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: &id007 [yr, ya, rarad]
     output_dim: 2
     map: &id006 [0, -1, 2, 1, -1, 2]
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 #Run 1
 ## Combination 1
@@ -53,14 +53,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 #Run 2
 ## Combination 1
@@ -85,14 +85,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 #Run 3
 ## Combination 1
@@ -117,14 +117,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 #Run 4
 ## Combination 1
@@ -149,14 +149,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 #Run 5
 ## Combination 1
@@ -181,14 +181,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 
 
@@ -215,14 +215,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 
 #Run 7
@@ -248,14 +248,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 
 #Run 8
@@ -281,14 +281,14 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
 #Run 9
 ## Combination 1
@@ -313,12 +313,12 @@
     map: *id005
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear
   - features: *id007
     output_dim: 2
     map: *id006
     reps: 1
     encoding: serial
-    ansatz: ugates
+    ansatz: efficientsu2
     entangle: linear

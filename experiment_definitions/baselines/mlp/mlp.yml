@@ -1,0 +1,54 @@
+# # 1. MLP Optimized with SPSA (The "Fair" Architectural Comparison)
+# - run: 0
+#   model: "classical"
+#   save_dir: "baselines/mlp"
+#   data: "data/reduce_row_number_absolutes"
+  
+#   # Data Configuration (Mariner 3DoF)
+#   select_features: ['sv', 'wv', 'yr', 'ya', 'rarad']
+#   window_size: 5
+#   horizon: 5
+#   predict: "motion"
+  
+#   # Architecture (~296 parameters)
+#   # Input (25) -> Linear (6) -> Tanh -> Output (20)
+#   num_layers: 1
+#   hidden_size: 6
+  
+#   # Optimization: SPSA + Dynamic LR (Identical to VQC settings)
+#   optimizer: "spsa"
+#   maxiter: 4000
+#   learning_rate: [0.1, 0.001]
+#   perturbation: 0.15
+#   batch_size: 256
+  
+#   # Logic Flags
+#   convergence_stop: false
+#   validate_all: false
+
+# 2. MLP Optimized with Adam (The "SOTA" Benchmark)
+- run: 0
+  model: "classical"
+  save_dir: "baselines/mlp"
+  data: "data/reduce_row_number_absolutes"
+  
+  # Data Configuration
+  select_features: ['sv', 'wv', 'yr', 'ya', 'rarad']
+  window_size: 5
+  horizon: 5
+  predict: "motion"
+  
+  # Architecture (~280 parameters)
+  # Input (25) -> Linear (5) -> Tanh -> Linear (5) -> Tanh -> Output (20)
+  num_layers: 2
+  hidden_size: 5
+  
+  # Optimization: Adam (Matching the paper's optimization strategy)
+  optimizer: "adam"
+  maxiter: 4000  # Adam typically requires fewer epochs than SPSA iterations
+  learning_rate: 0.001
+  batch_size: 256
+  
+  # Logic Flags
+  convergence_stop: false
+  validate_all: false

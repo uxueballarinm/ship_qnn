@@ -1,0 +1,33 @@
+# 1. QNN Optimized with Adam (The "Quantum SOTA" Benchmark)
+- run: 0
+  model: vanilla
+  save_dir: baselines/qnn_adam
+  data: data/reduce_row_number_absolutes
+  
+  # Data Configuration (Exact match to Mariner MLP)
+  select_features: ['sv', 'wv', 'yr', 'ya', 'rarad']
+  window_size: 5
+  horizon: 5
+  predict: motion
+  
+  # Architecture (~280 parameters for fair comparison)
+  # Quantum: 5 Qubits, Compact Encoding
+  # Ansatz: EfficientSU2 with reps: 15 (160 Q-params)
+  # Readout: Classical Linear (5 qubits -> 20 outputs) (120 C-params)
+  encoding: compact
+  ansatz: efficientsu2
+  reps: 1
+  entangle: linear
+  map: [1,0,4,2,3,-1]
+  
+  # Optimization: Adam (Matches Paper & MLP Baseline)
+  optimizer: "adam"
+  maxiter: 3      # Symmetry with your MLP config
+  learning_rate: 0.001
+  batch_size: 16
+  weights: [1.0, 1.0, 1.0, 1.0]
+  initialization: identity
+  
+  # Logic Flags
+  convergence_stop: false
+  validate_all: false
