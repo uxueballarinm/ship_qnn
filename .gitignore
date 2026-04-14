@@ -25,6 +25,9 @@ old_experiments/
 models/disaster_folder/
 figures/
 data/
+experiment_definitions/
+*.yml
+models/
 
 # --- Logs & Data Files ---
 # 1. Allow the logs directory and all its nested subfolders
