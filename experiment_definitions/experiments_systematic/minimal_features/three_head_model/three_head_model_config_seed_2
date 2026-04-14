@@ -671,7 +671,7 @@
     entangle: linear
   - features: *id006
     output_dim: 2
-    map: &id0014 [2, 0, -1, 1, 2, -1]
+    map: &id0014 [2, 0, -1, 2, 1, -1]
     reps: 1
     encoding: serial
     ansatz: efficientsu2

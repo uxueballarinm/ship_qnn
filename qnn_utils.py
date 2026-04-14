@@ -1,3 +1,4 @@
+# Data gestion
 import os
 import pickle
 import argparse
@@ -5,29 +6,34 @@ from copy import deepcopy
 import glob
 import json
 
+# Time libraries
 import time
 import datetime
 
+# Math, data manipulation and plotting
 import math
 import random
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.font_manager as fm
 from matplotlib.lines import Line2D
 import matplotlib.cm as cm
 from matplotlib.lines import Line2D
-import qiskit_algorithms
+from matplotlib.patches import Patch
 
+# Data preprocessing and metrics
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_squared_error
 
+# Data handling
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
+#Qiskit framework
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit import ParameterVector
@@ -37,8 +43,9 @@ from qiskit_aer.primitives import EstimatorV2 as Estimator
 from qiskit.transpiler import generate_preset_pass_manager
 from qiskit_machine_learning.neural_networks import EstimatorQNN
 from qiskit_algorithms.optimizers import SPSA, COBYLA
+import qiskit_algorithms
 
-# ANSI Color Codes for Terminal Output
+# Logging and warnings
 C_RED = '\033[91m'
 C_YELLOW = '\033[93m'
 C_GREEN = '\033[92m'
@@ -46,7 +53,8 @@ C_BLUE = '\033[94m'
 C_RESET = '\033[0m'
 
 colors = ['#E60000', '#FF8C00', '#C71585', '#008080', '#1E90FF']
-#"Position X", "Position Y",
+
+# Dataset variables
 full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle", "Speed U", "Rudder Angle (deg)", "Rudder Angle (rad)", "Abs Sway", "Abs Rudder"]#, "OOD Label"]
 
 
@@ -54,16 +62,16 @@ full_feature_set = [ "Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle",
 # 1. DATA & UTILITY FUNCTIONS
 # ==============================================================================
 
-def str2bool(v):
+def str2bool(v): # To handle boolean flags
+
     if isinstance(v, bool): return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'): return True
     elif v.lower() in ('no', 'false', 'f', 'n', '0'): return False
     else: raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-def map_names(feature_list, reverse=False):
-    """Maps between short codes (wv) and full names (Sway Velocity)."""
-    # Central Dictionary
+def map_names(feature_list, reverse=False): # To shorten the feature names for mapping and display purposes
+    
     code_to_name = {
         "sv":"Surge Velocity", "wv":"Sway Velocity", 
         "yr":"Yaw Rate", "ya":"Yaw Angle",
@@ -73,9 +81,7 @@ def map_names(feature_list, reverse=False):
         "dyr":"delta Yaw Rate", "dya":"delta Yaw Angle",
         "asv":"Abs Sway", "ararad":"Abs Rudder",
         "dasv":"delta Abs Sway", "dararad":"delta Abs Rudder",
-        # Ansatz
         "effsu2": "efficientsu2", "ugates": "ugates", "realamplitudes": "realamp",
-        # Entanglement
         "lin": "linear", "rev": "reverse_linear", "circ": "circular", "full": "full", "pair": "pairwise", "sca": "sca"
     }
 
@@ -91,26 +97,21 @@ def map_names(feature_list, reverse=False):
             else: raise ValueError(f"Unknown feature code: '{code}'. Available: {list(code_to_name.keys())}")
         return columns
 
-def process_single_df(df):
-    """Performs feature engineering on a single dataframe."""
-    # 1. Deltas
+def process_single_df(df): # Performs feature engineering on a single dataframe (calculte deltas and shift controls)
+    
     for col in ['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']:
         if col in df.columns:
             df[f'delta {col}'] = df[col].diff().fillna(0)
-    
-    # 2. Shift Controls (Action at t affects State at t+1)
     control_cols = ["Rudder Angle (deg)", "Rudder Angle (rad)"]
     for col in control_cols:
         if col in df.columns:
             df[col] = df[col].shift(-1)
-            
-    # 3. Drop NaNs created by shifting
     df.dropna(inplace=True)
     return df
-def sliding_window(x, y, window_size, horizon):
-    """Creates windows from a single continuous trajectory."""
-    x_wins, y_wins = [], []
-    # Stop when we don't have enough data for a full window + horizon
+
+def sliding_window(x, y, window_size, horizon): # Creates windows from a single continuous trajectory taking the horizons into account.
+    
+    x_wins, y_wins = [], [] # wins means window not winning.
     limit = len(x) - window_size - horizon + 1
     
     for i in range(limit):
@@ -118,23 +119,18 @@ def sliding_window(x, y, window_size, horizon):
         y_wins.append(y[i + window_size : i + window_size + horizon])
         
     return np.array(x_wins), np.array(y_wins)
-def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None, fit_scalers=False):
-    """
-    Loads all CSVs from a directory, processes them individually, 
-    normalizes them (fitting on Train only), and stacks them into a dataset.
-    """
-    # 1. Load Files
-    files = glob.glob(os.path.join(directory, "*.csv"))
+
+def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None, fit_scalers=False): # Loads all CSVs from a directory, processes them individually normalizes them (fitting on Train only), and stacks them into a dataset.
+
+    files = glob.glob(os.path.join(directory, "*.csv")) # Assumes all CSV files in the directory are part of the dataset. Adjust if there are non-data CSVs.
     if not files:
         raise ValueError(f"No CSV files found in {directory}")
     
     print(f"Loading {len(files)} files from {directory}...")
-    
-    raw_dfs = [pd.read_csv(f, index_col=0) for f in files]
-    processed_dfs = [process_single_df(df.copy()) for df in raw_dfs]
-    
-    # 2. Resolve Features/Targets (Using first DF to check columns)
-    if not hasattr(args, 'features_resolved') or not args.features_resolved:
+    raw_dfs = [pd.read_csv(f, index_col=0) for f in files] # Load all CSVs into dataframes
+    processed_dfs = [process_single_df(df.copy()) for df in raw_dfs] # Process each dataframe (calculate deltas + shift controls)
+
+    if not hasattr(args, 'features_resolved') or not args.features_resolved: # Select features based on args (select or drop)
         select_list = getattr(args, 'select_features', None)
         drop_list = getattr(args, 'drop_features', None)
         if select_list:
@@ -146,45 +142,37 @@ def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None
         
         if args.predict == "motion": args.targets = ["Surge Velocity","Sway Velocity","Yaw Rate","Yaw Angle"]
         elif args.predict == "delta": args.targets = ["delta Surge Velocity", "delta Sway Velocity", "delta Yaw Rate", "delta Yaw Angle"]
-        elif args.predict == "motion_without_surge": args.targets = ["Sway Velocity","Yaw Rate","Yaw Angle"]
-        args.features_resolved = True # Flag to avoid re-resolving
+        elif args.predict == "custom": args.targets = map_names(args.custom_targets)
+        args.features_resolved = True 
 
-    # 3. Extract Raw Sequences
     x_seqs, y_seqs = [], []
     for df in processed_dfs:
-        x_seqs.append(df[args.features].values)
-        y_seqs.append(df[args.targets].values)
-        
-    # 4. Fit Scalers (ONLY if this is the training set)
+        x_seqs.append(df[args.features].values) # Select features for X based on the resolved feature list and target list
+        y_seqs.append(df[args.targets].values) # Select targets for Y based on the resolved target list
+
     if fit_scalers:
-        all_x = np.concatenate(x_seqs, axis=0)
-        all_y = np.concatenate(y_seqs, axis=0)
-        
-        x_scaler = MinMaxScaler(feature_range=(0, np.pi))
-        x_scaler.fit(all_x)
+        all_x = np.concatenate(x_seqs, axis=0) # Fit scalers on the entire input feature dataset  if fit_scalers is True (should only be True for the Train set to avoid data leakage) puting first the first dataset, then the second and so on, ensuring that the temporal order is maintained.
+        all_y = np.concatenate(y_seqs, axis=0) # Fit scalers on the entire input target dataset  if fit_scalers is True (should only be True for the Train set to avoid data leakage) puting first the first dataset, then the second and so on, ensuring that the temporal order is maintained.
+        x_scaler = MinMaxScaler(feature_range=(0, np.pi)) # Scale inputs to [0, pi] for angle encoding, to ensure that the range goes from a pure state to a maximally mixed one.
+        x_scaler.fit(all_x) # Only fit for the Train set.
         
         if args.norm:
-            y_scaler = MinMaxScaler(feature_range=(-1, 1))
-            y_scaler.fit(all_y)
+            y_scaler = MinMaxScaler(feature_range=(-1, 1)) # Scale targets to [-1, 1] if normalization is enabled, otherwise keep original scale (which might be large for some features and small for others, but the QNN should be able to handle it as long as the input encoding is consistent)
+            y_scaler.fit(all_y) # Only fit for the Train set.
         else:
-            y_scaler = None
-            
-    # 5. Normalize & Window (Per Sequence to avoid jumps)
+            y_scaler = None # If not normalizing, we won't use a scaler for Y.
     final_x_wins, final_y_wins = [], []
     
-    for x, y in zip(x_seqs, y_seqs):
-        # Normalize
-        x_norm = x_scaler.transform(x)
-        x_norm = np.clip(x_norm, 0, np.pi)
+    for x, y in zip(x_seqs, y_seqs):# We iterate through each sequence, normalize it, and create windows. We do this after fitting the scalers on the entire dataset to ensure that the scaling is consistent across all sequences.
+        x_norm = x_scaler.transform(x) 
+        x_norm = np.clip(x_norm, 0, np.pi) # Ensure that all inputs are within the expected range after scaling, to prevent issues with the quantum encoding. This is a safeguard in case there are outliers or if the scaler produces values slightly outside the range due to numerical precision.
         
         if args.norm and y_scaler:
-            y_norm = y_scaler.transform(y)
+            y_norm = y_scaler.transform(y) # Only normalize Y if normalization is enabled and we have a fitted scaler. If normalization is disabled, we keep the original target values, which might be on different scales but should still be learnable by the QNN as long as the input encoding is consistent.
         else:
-            y_norm = y
-            
-        # Window
-        xw, yw = sliding_window(x_norm, y_norm, args.window_size, args.horizon)
-        if len(xw) > 0:
+            y_norm = y # If the normalization is not enabled.
+        xw, yw = sliding_window(x_norm, y_norm, args.window_size, args.horizon) # Create windows from the normalized sequences. If the sequence is too short to create any windows given the window_size and horizon, we skip it.
+        if len(xw) > 0: 
             final_x_wins.append(xw)
             final_y_wins.append(yw)
             
@@ -192,87 +180,37 @@ def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None
         raise ValueError(f"No valid windows created from {directory}. Check window_size/horizon vs file lengths.")
 
     # 6. Stack
-    X_data = np.concatenate(final_x_wins, axis=0)
-    Y_data = np.concatenate(final_y_wins, axis=0)
+    X_data = np.concatenate(final_x_wins, axis=0) # Final data with the windows created. (If it was 1,2,3,4,5 it becomes [[1,2],[2,3],[3,4],[4,5]] for window_size=2 and horizon=1 for example and if it was 1,2,3,4,5 and horizon was 2 it becomes [[[1,2],[2,3]], [[2,3],[3,4]], [[3,4],[4,5]]])
+    Y_data = np.concatenate(final_y_wins, axis=0) # Final targets with the windows created. (If it was 1,2,3,4,5 it becomes [[3],[4],[5]] for window_size=2 and horizon=1 for example and if it was 1,2,3,4,5 and horizon was 2 it becomes [[[3],[4]], [[4],[5]]])
     
     return X_data, Y_data, x_scaler, y_scaler
-# def get_seqs(df, feature_columns_used, prediction_columns_used):
-#     return df[feature_columns_used].to_numpy(), df[prediction_columns_used].to_numpy()
-
-# def get_fold_indices(total_length, num_folds=4):
-#     fold_size = math.ceil(total_length / num_folds)
-#     split_indices = [0]
-#     for i in range(1, num_folds):
-#         next_idx = min(fold_size * i, total_length)
-#         split_indices.append(next_idx)
-#     if split_indices[-1] != total_length: # Ensure the last index is exactly the total length
-#         split_indices.append(total_length)
-#     return split_indices
-
-# def make_sliding_window_ycustom_folds(x, y, window_size, horizon_size, num_folds=4):
-
-#     split_indices = get_fold_indices(len(x), num_folds)
-    
-#     x_data_folds, y_data_folds = [], []
-
-#     for k in range(num_folds):
-#         fold_x, fold_y = [], []
-        
-#         start_idx, end_idx = split_indices[k], split_indices[k+1]
-        
-#         for i in range(start_idx, end_idx):
-#             if i + window_size + horizon_size <= end_idx:
-#                 fold_x.append(x[i : i + window_size])
-#                 fold_y.append(y[i + window_size : i + window_size + horizon_size])
-                
-#         x_data_folds.append(np.array(fold_x))
-#         y_data_folds.append(np.array(fold_y))
-        
-#     return x_data_folds, y_data_folds
-
 
 # ==============================================================================
 # 2. CIRCUIT CONSTRUCTION
 # ==============================================================================
-def _parse_feature_map(map_input, selected_features):
-    """Parses mixed tokens (int strings, feature codes) into integers."""
+def _parse_feature_map(map_input, selected_features): # Parses mixed tokens (int strings, feature codes) into integers.
+
     if map_input is None: return None
     indices = []
     feat_to_idx = {name: i for i, name in enumerate(selected_features)}
-    for item in map_input:
-        try: # Try treating as integer (for indices or -1)
+    for item in map_input: # We try to parse each item as an integer index first. If that fails, we treat it as a feature code and look it up in the mapping. If it's not found in the mapping, we raise an error.
+        try: 
             val = int(item)
             indices.append(val)
-        except ValueError: # Treat as Feature Code (e.g. 'px')
+        except ValueError: 
             full_name_list = map_names([item])
             if not full_name_list: raise ValueError(f"Unknown code: {item}")
             full_name = full_name_list[0]
             if full_name in feat_to_idx: indices.append(feat_to_idx[full_name])
             else: raise ValueError(f"Feature '{item}' ({full_name}) in map but NOT in selected features: {selected_features}")
     return indices
-# def _validate_chunk_completeness(chunk, num_features, layer_idx=None):
-#     """Validates that a layer contains exactly one instance of every feature."""
-#     valid = [x for x in chunk if x != -1]
-#     context = f"Layer {layer_idx}" if layer_idx is not None else "Template"
-    
-#     if len(valid) != len(set(valid)):
-#         raise ValueError(f"[ERROR] [Map] Found duplicate features in {context}. Segment: {chunk}")
-#     if set(valid) != set(range(num_features)):
-#         raise ValueError(f"[ERROR] [Map] Missing or extra features in {context}. Segment: {chunk}")
 def _validate_chunk_completeness(chunk, num_features, layer_idx=None):
     """
     Validates that a layer contains all features at least once.
     ALLOWS duplicate features for parameter repetition (re-uploading).
     """
-    # Filter out -1 (bias or idle qubits)
     valid = [x for x in chunk if x != -1]
     context = f"Layer {layer_idx}" if layer_idx is not None else "Template"
-    
-    # 1. REMOVED the uniqueness check to allow parameter repetition
-    # Previously: if len(valid) != len(set(valid)): raise ValueError(...)
-    
-    # 2. CHECK: Does the map still contain every required feature index?
-    # We use set() to ensure that even with duplicates, the full range is present.
     required_features = set(range(num_features))
     current_features = set(valid)
     
@@ -289,14 +227,9 @@ def _validate_chunk_completeness(chunk, num_features, layer_idx=None):
         raise ValueError(f"{error_msg} Segment: {chunk}")
 def _load_and_validate_map(args, config):
     """Main processor for feature map parsing and validation."""
-    reorder_active = getattr(args, 'reorder', True)
     num_padding = config["total_slots"] - config["num_features"]
     canonical_map = np.concatenate([np.arange(config["num_features"]), np.full(num_padding, -1)]).astype(int)
     raw_map = getattr(args, 'map', None)
-    if reorder_active or raw_map is None:
-        if raw_map is not None:
-            print(f"{C_YELLOW}WARNING: Feature 'reorder' is active --> Ignoring custom input 'map'.{C_RESET}")
-        return canonical_map, None
     flat_indices = _parse_feature_map(raw_map, args.features)
     n_slots, n_reps = config["total_slots"], args.reps
     
@@ -313,12 +246,18 @@ def _get_encoding_config(args):
     """Calculates circuit dimensions."""
     num_features = len(args.features)
     raw_map = getattr(args, 'map', None)
+    min_ugates = math.ceil(num_features / 3)
+    min_slots_per_layer = min_ugates * 3
     if raw_map is None:
-        num_ugates = math.ceil(num_features / 3)
+        num_ugates = min_ugates
     else:
-        if len(raw_map) % 3 != 0:
-            raise ValueError(f"Map length ({len(raw_map)}) must be a multiple of 3.")
-    num_ugates = len(raw_map) // 3
+        total_map_len = len(raw_map)
+        if args.reps > 1 and total_map_len % (args.reps * 3) == 0 and total_map_len >= (min_slots_per_layer * args.reps):
+            num_ugates = (total_map_len // args.reps) // 3
+        else:
+            if total_map_len % 3 != 0:
+                raise ValueError(f"Map length ({total_map_len}) must be a multiple of 3.")
+            num_ugates = total_map_len // 3
     total_slots = num_ugates * 3
     if args.encoding == 'compact':
         qubits_per_step, num_qubits, sub_layers = 1, args.window_size, 1
@@ -349,7 +288,6 @@ def _get_params_for_gates(chunk_idx, num_features, input_params, base_idx, rep_i
         if feat_idx != -1: p.append(input_params[base_idx + feat_idx]) # Valid feature: Read from input parameters
         else: p.append(0.0) # Sentinel -1: Padding/Empty slot -> 0.0 angle
     return p
-
 def _apply_entanglement(qc, num_qubits, strategy='circular', layer_index=0):
     """Entanglement strategies."""
     if num_qubits < 2: return
@@ -389,7 +327,6 @@ def _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj,
         weight_idx += weights_per_layer
     
     return weight_idx
-
 # --- Block Builders ---
 def _build_compact_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
 
@@ -433,10 +370,7 @@ def _build_accumulated_block(qc, args, config, input_params, weight_params, weig
     return weight_idx, current_layer + 1
 def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers have any effect
 
-    # 1. Setup
     config = _get_encoding_config(args)
-    
-    # 2. Ansatz Object Init
     if args.ansatz == 'ugates': 
         ansatz_obj = 'ugates'
         config["weights_per_layer"] = 3 * config["num_qubits"]
@@ -448,10 +382,11 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
         config["weights_per_layer"] = len(ansatz_obj.parameters)
     qc = QuantumCircuit(config["num_qubits"])
     if args.use_hadamard:
-        for i in range(config["num_qubits"]): qc.h(i) # Initial Layer of Hadamards
+        for i in range(config["num_qubits"]): qc.h(i) 
     input_params = ParameterVector('θ', args.window_size * config["num_features"])
     weight_params = ParameterVector('ω', config["total_physical_layers"] * config["weights_per_layer"])
     rng = np.random.default_rng(args.run)
+
     weight_idx = 0
     current_physical_layer = 0
     # Map processing
@@ -460,10 +395,7 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
     for r in range(args.reps):
         # Select Indices
         if per_layer_orders is not None: current_indices = per_layer_orders[r]
-        else: current_indices = rep_indices
-        # 2. Shuffle
-        if args.reorder: current_indices = rng.permutation(current_indices)
-        
+        else: current_indices = rep_indices        
         # 3. Record
         full_map_history.extend(current_indices.tolist())
         
@@ -487,7 +419,10 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
         
         if barriers: qc.barrier()
         if per_layer_orders is None: rep_indices = current_indices
-    args.map = full_map_history
+    if getattr(args, 'reorder', False) or per_layer_orders is not None:
+        args.map = full_map_history
+    else:
+        args.map = rep_indices.tolist()
 
     return qc, input_params, weight_params
 
@@ -496,7 +431,7 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
 # 4. MODEL DEFINITIONS & TRAINING
 # ==============================================================================
 
-class WindowEncodingQNN: # Numpy version
+class WindowEncodingQNN:
 
     def __init__(self, qnn, output_shape, seed):
 
@@ -506,7 +441,7 @@ class WindowEncodingQNN: # Numpy version
         self.columns = output_shape[2]
         self.num_q_params = qnn.num_weights
         self.output_dim = self.horizon*self.columns
-        self.num_c_params = (self.input_dim * self.output_dim) + self.output_dim # Classical Linear Readout Layer: Weights matrix (Inputs*Outputs) + Bias (Outputs)
+        self.num_c_params = (self.input_dim * self.output_dim) + self.output_dim
         self.total_params = self.num_q_params + self.num_c_params
         print(f"[Model] Qubits: {self.input_dim} | Params: {self.num_q_params} (Q) + {self.num_c_params} (C)")        
         if seed is not None: self.rng = np.random.default_rng(seed)
@@ -515,8 +450,6 @@ class WindowEncodingQNN: # Numpy version
         q_params = params_flat[:self.num_q_params]
         x_flat = x.reshape(x.shape[0], -1)
         y = self.qnn.forward(x_flat, q_params)
-
-        # Readout layer
         c_params = params_flat[self.num_q_params:]
         W = c_params[:self.input_dim * self.output_dim].reshape(self.input_dim, self.output_dim)
         b = c_params[self.input_dim * self.output_dim:]
@@ -525,10 +458,10 @@ class WindowEncodingQNN: # Numpy version
     
     def initialize_parameters(self, strategy):
 
-        if strategy == 'identity': q_params = self.rng.uniform(-0.1, 0.1, size=self.num_q_params) # (almost) identity matrix initialization
-        elif strategy == 'uniform': q_params = self.rng.uniform(0, 2*np.pi, size=self.num_q_params) # uniform random initialization
+        if strategy == 'identity': q_params = self.rng.uniform(-0.1, 0.1, size=self.num_q_params)
+        elif strategy == 'uniform': q_params = self.rng.uniform(0, 2*np.pi, size=self.num_q_params) 
         limit = np.sqrt(6 / (self.input_dim + self.output_dim))
-        c_params = self.rng.uniform(-limit, limit, size=self.num_c_params) # xavier/glorot initialization
+        c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
         return np.concatenate([q_params, c_params])
 
 class ClassicalMLP(nn.Module):
@@ -546,62 +479,29 @@ class ClassicalMLP(nn.Module):
         layers.append(nn.Linear(hidden_size, output_size))
         self.network = nn.Sequential(*layers).to(self.device)
     def forward(self, x):
-        # x shape: (Batch, Window_Size, Features)
-        x_flat = x.view(x.size(0), -1) # Flatten the window
+        x_flat = x.view(x.size(0), -1)
         out = self.network(x_flat)
         return out
 
-
-# class ClassicalLSTM(nn.Module):
-#     def __init__(self, input_size, hidden_size, num_layers, output_size = None, seed=42):
-#         super().__init__()
-#         torch.manual_seed(seed)
-        
-#         # LSTM Layer
-#         # input_shape: (Batch, Seq_Len, Features)
-#         self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, batch_first=True)
-#         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#         # Readout Layer
-#         self.fc = nn.Linear(hidden_size, output_size,device=self.device)
-#     def forward(self, x):
-#         # x shape: (Batch, Window_Size, Features)
-#         # lstm_out shape: (Batch, Window_Size, Hidden_Size)
-#         lstm_out, _ = self.lstm(x)
-        
-#         # We take the output of the LAST time step in the window to predict the future
-#         last_time_step = lstm_out[:, -1, :] 
-        
-#         out = self.fc(last_time_step)
-#         return out
-    
 class ClassicalWrapper:
     def __init__(self, torch_model, device,output_shape = None):
         self.model = torch_model
         self.device = device
         self.num_targets = output_shape[2] if output_shape else 4
     def initialize_parameters(self, method='uniform'):
-        """
-        Mimics the QNN initialization for a fair comparison.
-        """
-        # Get total number of parameters
         total_params = sum(p.numel() for p in self.model.parameters())
         
         if method == 'uniform':
-            # Initialize between -pi and pi to match quantum rotation ranges
             weights = np.random.uniform(-np.pi, np.pi, total_params)
         elif method == 'identity':
             weights = np.zeros(total_params)
         else:
             weights = np.random.randn(total_params) * 0.1
-            
-        # Apply these weights to the torch model
         self.set_weights(weights)
         return weights
     def get_weights(self):
-        # Flatten all parameters into a single numpy array for SPSA
         return torch.cat([p.flatten() for p in self.model.parameters()]).detach().cpu().numpy()
     def set_weights(self, weights):
-        # Reshape numpy array back into the torch model's parameters
         weights = np.clip(weights, -5.0, 5.0) 
         weights_tensor = torch.tensor(weights, dtype=torch.float32).to(self.device)
         ptr = 0
@@ -616,249 +516,36 @@ class ClassicalWrapper:
         t_x = torch.tensor(x, dtype=torch.float32).to(self.device)
         with torch.no_grad():
             out = self.model(t_x)
-        # Reshape to (Batch, Horizon, Targets)
         return out.cpu().numpy().reshape(x.shape[0], -1, self.num_targets)
-# Add/Replace in utils.py
 
 class MultiHeadQNN:
-    """
-    A Generic Multi-Head QNN Wrapper.
-    - Manages N independent models (heads).
-    - Splits the flat parameter vector into chunks for each head.
-    - Splits the input tensor 'x' based on feature indices for each head.
-    - Concatenates the outputs of all heads into one final tensor.
-    """
     def __init__(self, models_list, input_indices_list):
         self.models = models_list
         self.input_groups = input_indices_list
-        
-        # Calculate parameter boundaries
         self.param_splits = []
         total = 0
         for m in self.models:
             self.param_splits.append(m.total_params)
             total += m.total_params
         self.total_params = total
-        
         print(f"\n[MultiHead] Initialized with {len(self.models)} heads.")
         for i, (n_p, grp) in enumerate(zip(self.param_splits, self.input_groups)):
             print(f"  > Head {i+1}: {n_p} params | Input Indices: {grp}")
-
     def forward(self, x, params):
         outputs = []
         param_start = 0
-        
-        # Iterate over each head
         for model, input_idx, n_params in zip(self.models, self.input_groups, self.param_splits):
-            # 1. Slice Parameters for this head
             p_head = params[param_start : param_start + n_params]
             param_start += n_params
-            
-            # 2. Slice Inputs (Batch, Window, Selected_Features)
             x_head = x[:, :, input_idx]
-            
-            # 3. Forward Pass
             outputs.append(model.forward(x_head, p_head))
-            
-        # 4. Concatenate all outputs along the feature dimension (last axis)
         return np.concatenate(outputs, axis=2)
 
     def initialize_parameters(self, strategy):
-        # Initialize each head and concatenate
         params_list = [m.initialize_parameters(strategy) for m in self.models]
         return np.concatenate(params_list)
-# class ConvergenceReached(Exception):
-#     """Custom exception to interrupt the optimizer when thesis criteria are met."""
-#     pass
-# def convergence_check(unique_history, convergence_window):
-#     if len(unique_history) < 2 * convergence_window:
-#         return False
-#     # Implementation for convergence checking
-#     recent = unique_history[-(2 * convergence_window):]
-#     w1 = recent[:convergence_window]
-#     w2 = recent[convergence_window:]
-    
-#     mu1, mu2, sigma2 = np.mean(w1), np.mean(w2), np.std(w2) #
-    
-#     # Thesis formula: |mu1 - mu2| < sigma2 / (2 * sqrt(N))
-#     threshold = sigma2 / (2 * np.sqrt(convergence_window))
-    
-#     return abs(mu1 - mu2) < threshold #
-
-# def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
-#     num_targets = target.shape[-1]
-    
-#     # Safety: If output dim changes, revert to equal weights to prevent crash
-#     if len(weights) != num_targets:
-#         weights = np.ones(num_targets)
-#     if reconstruct and scaler:
-
-#         target_real = scaler.inverse_transform(target.reshape(-1, num_targets)).reshape(target.shape)
-#         pred_real = scaler.inverse_transform(pred.reshape(-1, num_targets)).reshape(pred.shape)
-
-#         if args.predict == 'delta':
-#             target_traj = np.cumsum(target_real, axis=1)
-#             pred_traj = np.cumsum(pred_real, axis=1)
-#             sq_diff = (pred_traj - target_traj) ** 2
-#             weighted_diff = sq_diff * weights  # Broadcasting applies weight to last axis
-#             return np.mean(weighted_diff)
-#             # return np.mean((pred_traj - target_traj) ** 2)
-        
-#         else: 
-#             # Weighted MSE for Real Values
-#             sq_diff = (pred_real - target_real) ** 2
-#             weighted_diff = sq_diff * weights
-#             return np.mean(weighted_diff)
-#             # return np.mean((pred_real - target_real) ** 2)
-
-#     else:
-#         if reconstruct and not scaler: print(f'{C_YELLOW}WARNING: Scaler missing --> Cannot reconstruct trajectory.{C_RESET}')
-#         sq_diff = (pred - target) ** 2
-        
-#         # Apply Weights:
-#         # If Surge error is 0.01 -> becomes 0.1 (Visible to optimizer)
-#         # If Sway error is 0.01 -> stays 0.01
-#         weighted_diff = sq_diff * weights
-        
-#         return np.mean(weighted_diff)
-#         # return np.mean((pred - target) ** 2)
-
-# def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
-
-#     best_val_loss = float('inf')
-#     best_params = None
-    
-#     train_history, val_history = [], []
-#     unique_val_history = [] # For convergence checking (stores only unique values)
-    
-#     optimizer_name = args.optimizer.upper()
-#     # Use default 32 if not specified in args
-#     batch_size = getattr(args, 'batch_size', 32)
-#     use_batching = (optimizer_name == 'SPSA') and (batch_size < x_train.shape[0])
-    
-#     num_train_samples = x_train.shape[0]
-#     learning_rate_arg = args.learning_rate
-#     if optimizer_name == 'SPSA':
-#         if isinstance(learning_rate_arg,list) and len(learning_rate_arg) == 2:
-#             lr_start, lr_end = learning_rate_arg
-#             print(f"[Optimizer] Dynamic SPSA Learning Rate: {lr_start} -> {lr_end}")
-            
-#             def get_lr_at_k(k):
-#                 progress = min(k, args.maxiter) / args.maxiter
-#                 return lr_start - (lr_start - lr_end) * progress
-            
-#             # 2. Generator Factory (Used for OPTIMIZER only)
-#             # SPSA calls this. It needs no arguments. It yields values forever.
-#             def lr_generator_factory():
-#                 k = 0
-#                 while True:
-#                     yield get_lr_at_k(k)
-#                     k += 1
-            
-#             # ASSIGN THE FUNCTIONS, DO NOT CALL THEM
-#             spsa_lr_optimizer = lr_generator_factory
-#             spsa_learning_rate = get_lr_at_k
-#         else:
-#             # Handle standard float case
-#             val = learning_rate_arg[0] if isinstance(learning_rate_arg, list) else learning_rate_arg
-#             print(f"[Optimizer] Static SPSA Learning Rate: {val}")
-#             def static_generator():
-#                 while True: yield float(val)
-#             spsa_lr_optimizer = static_generator
-#             spsa_learning_rate = lambda k: float(val)
-#     current_batch_x = None
-#     current_batch_y = None
-#     call_counter = 0
-#     def objective_function(params):
-#         nonlocal best_val_loss, best_params, current_batch_x, current_batch_y, call_counter
-#         if use_batching:
-#             if call_counter % 2 == 0:
-#                 indices = np.random.choice(num_train_samples, size=batch_size, replace=False)
-#                 current_batch_x, current_batch_y = x_train[indices], y_train[indices]
-            
-#             x_input, y_target = current_batch_x, current_batch_y
-#         else:
-#             x_input,y_target = x_train, y_train
-#         call_counter += 1
-#         preds = model.forward(x_input, params)
-#         train_mse = _compute_loss(args, preds, y_target, args.reconstruct_train,args.weights, scaler)
-#         current_iter = call_counter // 2 if optimizer_name == 'SPSA' else call_counter
-#         # Determine if we validate this step
-#         if getattr(args, 'validate_all', False):
-#             check_val = True
-#         else:
-#             # Validate every 50 iterations
-#             check_val = (current_iter % 50 == 0)
-
-#         if check_val:
-#             val_preds = model.forward(x_val, params)
-#             val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, args.weights, scaler)
-#             if val_mse < best_val_loss:
-#                 best_val_loss = val_mse
-#                 best_params = np.copy(params) #NOTE: Usually final weights are better
-#             unique_val_history.append(val_mse)
-#             if getattr(args, 'convergence_stop', False):
-#                 c_win = args.convergence_window if args.validate_all else 20
-#                 if convergence_check(unique_val_history, convergence_window=c_win):
-#                     raise ConvergenceReached(f"Converged after {len(unique_val_history)} validation checks.")
-#         else:
-#             val_mse = val_history[-1] if val_history else train_mse
-#         if optimizer_name == 'SPSA':
-#             if call_counter % 2 == 0:
-#                 train_history.append(train_mse)
-#                 val_history.append(val_mse)
-
-#                 log_interval = 100
-#                 if len(train_history) % log_interval == 0:
-#                     if spsa_learning_rate:
-#                         lr_val = spsa_learning_rate(len(train_history))
-#                         lr_str = f" {lr_val:.5f}"
-#                     else:
-#                         lr_str = "N/A"
-#                     print(f"  > Iter {len(train_history):4d} | Train: {train_mse:.5f} | Val: {val_mse:.5f} | LR: {lr_str}")
-#         else:
-#             train_history.append(train_mse); val_history.append(val_mse)
-
-#             log_interval = 100 if use_batching else 50
-#             if len(train_history) % log_interval == 0:
-#                 print(f"  > Iter {len(train_history):4d} | Train MSE: {train_mse:.5f} | Val MSE: {val_mse:.5f}")
-#         return train_mse
-   
-
-#     start_time = time.time()
-#     print(f"\n[Training] Starting {args.optimizer.upper()} optimization...")
-#     if use_batching:
-#         print(f"  > Mode: Mini-Batch (Size: {batch_size})")
-#     else:
-#         print(f"  > Mode: Full-Batch (Size: {num_train_samples})")
-#     initial_weights = model.initialize_parameters(args.initialization)
-#     try:
-#         if args.optimizer.upper() == 'COBYLA':
-#             opt = COBYLA(maxiter=args.maxiter, tol = args.tolerance)
-#             res = opt.minimize(fun=objective_function, x0=initial_weights)
-#         elif args.optimizer.upper() == 'SPSA':
-#             opt = SPSA(maxiter=args.maxiter,learning_rate=spsa_lr_optimizer, perturbation=args.perturbation) 
-#             res = opt.minimize(fun=objective_function, x0=initial_weights)
-#         else:
-#             raise ValueError(f"Optimizer {optimizer_name} not supported.")
-#     except ConvergenceReached as e:
-#         print(f"\n{C_GREEN}[Success] {e}{C_RESET}")
-#         # Create a mock result object so 'res.x' exists for the return block
-#         res = argparse.Namespace(x=best_params)
-#     print(f"Training completed in {(time.time() - start_time) / 60:.2f} min.")
-#     # Fallback if best_params never updated (rare)
-#     if best_params is None: best_params = res.x
-
-#     return {
-#         "best_weights": best_params, "best_val_loss": best_val_loss, "final_weights": res.x,             
-#         "train_history": train_history, "val_history": val_history,         
-#     }
-
-
 def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
     num_targets = target.shape[-1]
-    
-    # Safety: If output dim changes, revert to equal weights to prevent crash
     if len(weights) != num_targets:
         weights = np.ones(num_targets)
     if reconstruct and scaler:
@@ -870,28 +557,18 @@ def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
             target_traj = np.cumsum(target_real, axis=1)
             pred_traj = np.cumsum(pred_real, axis=1)
             sq_diff = (pred_traj - target_traj) ** 2
-            weighted_diff = sq_diff * weights  # Broadcasting applies weight to last axis
+            weighted_diff = sq_diff * weights 
             return np.mean(weighted_diff)
-            # return np.mean((pred_traj - target_traj) ** 2)
         
         else: 
-            # Weighted MSE for Real Values
             sq_diff = (pred_real - target_real) ** 2
             weighted_diff = sq_diff * weights
             return np.mean(weighted_diff)
-            # return np.mean((pred_real - target_real) ** 2)
-
     else:
         if reconstruct and not scaler: print(f'{C_YELLOW}WARNING: Scaler missing --> Cannot reconstruct trajectory.{C_RESET}')
         sq_diff = (pred - target) ** 2
-        
-        # Apply Weights:
-        # If Surge error is 0.01 -> becomes 0.1 (Visible to optimizer)
-        # If Sway error is 0.01 -> stays 0.01
         weighted_diff = sq_diff * weights
-        
         return np.mean(weighted_diff)
-        # return np.mean((pred - target) ** 2)
 
 def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
 
@@ -901,7 +578,6 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     train_history, val_history = [], []
     
     optimizer_name = args.optimizer.upper()
-    # Use default 32 if not specified in args
     batch_size = getattr(args, 'batch_size', 32)
     use_batching = (optimizer_name == 'SPSA') and (batch_size < x_train.shape[0])
     
@@ -915,20 +591,14 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
             def get_lr_at_k(k):
                 progress = min(k, args.maxiter) / args.maxiter
                 return lr_start - (lr_start - lr_end) * progress
-            
-            # 2. Generator Factory (Used for OPTIMIZER only)
-            # SPSA calls this. It needs no arguments. It yields values forever.
             def lr_generator_factory():
                 k = 0
                 while True:
                     yield get_lr_at_k(k)
                     k += 1
-            
-            # ASSIGN THE FUNCTIONS, DO NOT CALL THEM
             spsa_lr_optimizer = lr_generator_factory
             spsa_learning_rate = get_lr_at_k
         else:
-            # Handle standard float case
             val = learning_rate_arg[0] if isinstance(learning_rate_arg, list) else learning_rate_arg
             print(f"[Optimizer] Static SPSA Learning Rate: {val}")
             def static_generator():
@@ -960,7 +630,7 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
             val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, args.weights, scaler)
             if val_mse < best_val_loss:
                 best_val_loss = val_mse
-                best_params = np.copy(params) #NOTE: Usually final weights are better
+                best_params = np.copy(params)
         else:
             val_mse = val_history[-1] if val_history else train_mse
         if optimizer_name == 'SPSA':
@@ -1002,7 +672,6 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     else:
         raise ValueError(f"Optimizer {optimizer_name} not supported.")
     print(f"Training completed in {(time.time() - start_time) / 60:.2f} min.")
-    # Fallback if best_params never updated (rare)
     if best_params is None: best_params = res.x
 
     return {
@@ -1016,18 +685,13 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
     """
     Standard PyTorch training loop with Adam optimizer.
     """
-    # 1. Prepare Data Loaders
     batch_size = args.batch_size if hasattr(args, 'batch_size') else 32
-
-    # Convert numpy to torch tensors
     t_x_train = torch.tensor(x_train, dtype=torch.float32).to(device)
     t_y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
     t_x_val = torch.tensor(x_val, dtype=torch.float32).to(device)
     t_y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
     train_loader = DataLoader(TensorDataset(t_x_train, t_y_train), batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(TensorDataset(t_x_val, t_y_val), batch_size=batch_size, shuffle=False)
-
-    # 2. Setup Training
     model = model.to(device)
     criterion = nn.MSELoss()
     if args.optimizer.lower() == 'adam':
@@ -1038,32 +702,29 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
     best_val_loss = float('inf')
     best_weights = None
     train_history, val_history = [], []
-    
-    # Early stopping config
     patience = getattr(args, 'patience', 20)
     counter = 0
     
     print(f"\n[Training] Starting Classical Optimization (Adam) on {device}...")
     start_time = time.time()
-    for epoch in range(args.maxiter): # 'maxiter' acts as 'epochs' here
+    for epoch in range(args.maxiter):
         model.train()
         epoch_loss = 0
         
         for x_batch, y_batch in train_loader:
-            # Forward
+
             x_batch, y_batch = x_batch.to(device), y_batch.to(device)
             preds = model(x_batch)
-            loss = criterion(preds, y_batch)
+            loss = criterion(preds, y_batch) # Forward
             
-            # Backward
-            optimizer.zero_grad(); loss.backward(); optimizer.step()
+            optimizer.zero_grad(); loss.backward(); optimizer.step() # Backward
+
             
             epoch_loss += loss.item()
             
         avg_train_loss = epoch_loss / len(train_loader)
         train_history.append(avg_train_loss)
 
-        # Validation
         model.eval()
         val_loss_accum = 0
         total_samples = 0
@@ -1080,19 +741,15 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         avg_val_loss = val_loss_accum / total_samples
         val_history.append(avg_val_loss)
 
-        # Logging
         if (epoch + 1) % 10 == 0:
             print(f"[Training] Epoch {epoch+1:4d} | Train MSE: {avg_train_loss:.6f} | Val MSE: {avg_val_loss:.6f}")
 
-        # Save Best Model Logic
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            best_weights = model.state_dict() # Save PyTorch state dict
+            best_weights = model.state_dict() 
             counter = 0
         else:
             counter += 1
-            
-        # Early Stopping
         if counter >= patience:
             print(f"Early stopping triggered at epoch {epoch+1}")
             break
@@ -1112,10 +769,9 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     Handles 4 update modes based on Target vs. Feature names.
     """
     
-    # 1. Setup
     num_samples = x_test.shape[0]; horizon = args.horizon        
     num_targets = len(args.targets)
-    state_vars = args.targets#['Surge Velocity', 'Sway Velocity', 'Yaw Rate', 'Yaw Angle']
+    state_vars = args.targets
     direct_updates, physics_updates = [], []
     update_rules = {} 
     
@@ -1123,10 +779,8 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         update_rules[t_idx] = []
         is_target_delta = "delta" in t_name.lower() or args.predict == 'delta'
         
-        # --- LOGIC 1: Primary Update (Direct Match) ---
         if t_name in args.features:
             f_idx = args.features.index(t_name)
-            # If target is Delta and Feature is Delta -> DIRECT and If target is Motion and Feature is Motion -> DIRECT
             update_rules[t_idx].append((f_idx, "DIRECT"))
             direct_updates.append(t_name)
         secondary_name, mode = None, None
@@ -1163,15 +817,11 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         print(f"    Direct Feedback:  {', '.join(direct_updates)}")
     if physics_updates:
         print(f"    Physics Feedback: {', '.join(physics_updates)}")
-    # 2. Initialization
     recursive_preds = np.zeros((num_samples, horizon, num_targets))
     curr_window = x_test[0:1, :, :].copy()
     last_feat_real = x_scaler.inverse_transform(curr_window[:, -1, :])
     
-    # Trackers for differentiation
     last_pred_values = np.zeros(num_targets) 
-    
-    # 3. Main Loop
     for i in range(num_samples):
         preds_full = model.forward(curr_window, best_params)
         recursive_preds[i] = preds_full[0]
@@ -1188,8 +838,6 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
         pred_step_norm = preds_full[:, 0, :]
         if y_scaler: pred_step_real = y_scaler.inverse_transform(pred_step_norm)
         else: pred_step_real = pred_step_norm
-        
-        # Apply Updates
         for t_idx, updates in update_rules.items():
             pred_val = pred_step_real[0, t_idx]
             for f_idx, mode in updates:
@@ -1198,8 +846,6 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
                 elif mode == "DIFF":
                     diff_val = pred_val if i == 0 else pred_val - last_pred_values[t_idx]
                     next_input_real[0, f_idx] = diff_val
-
-        # Update trackers
         last_pred_values = pred_step_real[0]
         last_feat_real = next_input_real   
         
@@ -1215,17 +861,13 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     orig_shape = y_test.shape # (N, H, T)
     num_targets = orig_shape[-1] 
     target_names = args.targets
-    # ONE-STEP EVALUATION
     preds_norm_step = model.forward(x_test, params) 
     
-    # Unscale
     if y_scaler:
         preds_real_step = y_scaler.inverse_transform(preds_norm_step.reshape(-1, num_targets)).reshape(orig_shape)
         y_gt_real = y_scaler.inverse_transform(y_test.reshape(-1, num_targets)).reshape(orig_shape)
     else:
         preds_real_step = preds_norm_step; y_gt_real = y_test
-
-    # Step metrics
     results['Step_MSE'] = mean_squared_error(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
     results['Step_R2'] = r2_score(y_gt_real.reshape(-1, num_targets), preds_real_step.reshape(-1, num_targets))
 
@@ -1264,15 +906,13 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         true_i = true_path[..., i].flatten()
         pred_i = pred_path_global_open[..., i].flatten()
         
-        # Calculate Abs Error for Max logic
         abs_err = np.abs(true_path[..., i] - pred_path_global_open[..., i])
         
         results[f'{clean_name}_Global_open_MSE'] = mean_squared_error(true_i, pred_i)
         results[f'{clean_name}_Global_open_R2']  = r2_score(true_i, pred_i)
 
-    # RECURSIVE EVALUATION (Updated Unpacking)
     preds_norm_rec, rec_ratio = recursive_forward_pass(args, model, params, x_test, x_scaler, y_scaler)
-    results['Recursivity'] = rec_ratio  # <--- Store Metric
+    results['Recursivity'] = rec_ratio  
     
     # Unscale
     if y_scaler:
@@ -1297,7 +937,6 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
         pred_i = pred_path_global[..., i].flatten()
         abs_err = np.abs(true_path[..., i] - pred_path_global[..., i])
         
-        # Store individual metrics
         results[f'{clean_name}_Global_closed_MSE'] = mean_squared_error(true_i, pred_i)
         results[f'{clean_name}_Global_closed_R2']  =r2_score(true_i, pred_i)
 
@@ -1342,11 +981,9 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     # ==========================================================================
     # 1. ROBUST PARAMETER COUNTING (Prevents Crash on Multi-Head)
     # ==========================================================================
-    total_params = len(final_w)    
-    # Handle qnn_dict being a list (MultiHead) or dict (Vanilla)
+    total_params = len(final_w)
     num_q_params = 0
     if isinstance(qnn_dict, list):
-        # Sum quantum params from all heads
         for head_dict in qnn_dict:
             if isinstance(head_dict, dict) and 'weight_params' in head_dict: num_q_params += len(head_dict['weight_params'])
     elif isinstance(qnn_dict, dict) and 'weight_params' in qnn_dict: num_q_params = len(qnn_dict['weight_params'])
@@ -1390,8 +1027,6 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
             list_encoding.append(enc_val)
             list_map.append(m_val)
             list_features.append(f_val)
-
-            # Build a clean dictionary for this head
             head_clean = {
                 'features': f_val,
                 'output_dim': h.get('output_dim', 'N/A'),
@@ -1416,13 +1051,22 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     def clean_filename_str(s):
         s = str(s).replace('[', '').replace(']', '').replace("'", "").replace('"', "")
         return s.replace(', ', '_').replace(',', '_')
-
+    if getattr(args, 'model', 'vanilla') == 'multihead':
+        h_count = len(getattr(args, 'heads_config', []))
+    else:
+        h_count = 1
+    run_num = getattr(args, 'run', 0)
     safe_ansatz = clean_filename_str(final_ansatz)
     safe_entangle = clean_filename_str(final_entangle)
     safe_reps = clean_filename_str(final_reps)
     safe_encoding = clean_filename_str(final_encoding)
-    model_filename = os.path.join(models_dir, f"{timestamp}_{args.model}_{args.optimizer}_{safe_encoding}_f{len(args.features)}_w{args.window_size}_h{args.horizon}_{safe_ansatz}_{safe_entangle}_r{safe_reps}.pkl")
-    
+    model_name = (
+        f"{timestamp}_{args.model}_{h_count}heads_run{run_num}_"
+        f"{args.optimizer}_{safe_encoding}_f{len(args.features)}_"
+        f"w{args.window_size}_h{args.horizon}_{safe_ansatz}_"
+        f"{safe_entangle}_r{safe_reps}.pkl"
+    )
+    model_filename = os.path.join(models_dir, model_name)
     save_payload = {
         "config": vars(args),
         "selected_weights": final_w,
@@ -1445,8 +1089,6 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     except ValueError: dt_object = timestamp 
 
     raw_data = {}
-    
-    # A. Add Args
     ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot',  'heads_config', 'initialization', 'ansatz', 'entangle', 'reps', 'encoding', 'map', 'features']
     
     def clean_val(v):
@@ -1456,13 +1098,9 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     
     for key, value in vars(args).items():
         if key not in ignore_keys: raw_data[key] = clean_val(value)
-
-    # B. Add Resolved Configs
     raw_data['features'] = str(final_features); raw_data['ansatz'] = str(final_ansatz)
     raw_data['entangle'] = str(final_entangle); raw_data['reps'] = str(final_reps)
     raw_data['encoding'] = str(final_encoding); raw_data['map'] = str(final_map)
-    
-    # C. Add Meta & Metrics
     raw_data['date'] = dt_object
     raw_data['model_id'] = os.path.basename(model_filename)
     raw_data['data_n'] = getattr(args, 'data_n', 'N/A')
@@ -1495,8 +1133,6 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
         "c params": num_c_params
     }
     raw_data.update(metric_map)
-
-    # D. Add Per-Target Metrics
     target_names = ["Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle"]
     metric_suffixes = ["Step MSE", "Step R2", "Local MSE",
                        "Global open MSE", "Global open R2",
@@ -1510,8 +1146,6 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
             col_name_excel = f"{tgt_space} {m_suffix}"
             if key_in_metrics in m_test:
                 raw_data[col_name_excel] = m_test[key_in_metrics]
-
-    # E. Build Final Column List (User Defined Order)
     final_column_order = [
         "date", "model_id", "run", "weight_selection","data", "data_n", "data_dt", 
         "features", "targets", "window_size", "horizon", "predict", "norm", 
@@ -1524,18 +1158,12 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
         "local MSE", "global open MSE", "global open R2", "global closed MSE", "global closed R2", 
         "recursivity", "initialization",
     ]
-    
-    # Append per-target cols in the order of targets -> metrics
     for tgt in target_names:
         for m in metric_suffixes:
             final_column_order.append(f"{tgt} {m}")
-    
-    # Construct Row
     ordered_row = {}
     for col in final_column_order:
         ordered_row[col] = raw_data.get(col, None)
-    
-    # Safety: Add any extra keys that might exist but weren't in the list
     for k, v in raw_data.items():
         if k not in ordered_row:
             ordered_row[k] = v
@@ -1553,15 +1181,9 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
         if os.path.exists(excel_filename):
             df_existing = pd.read_excel(excel_filename)
             df_existing = df_existing.map(normalize_loaded_bools)
-            
-            # Concatenate
             df_final = pd.concat([df_existing, df_new], ignore_index=True)
-            
-            # Reorder columns to match your preferred order, putting new columns at end
             cols_existing = list(df_existing.columns)
-            # We prioritize the User Order, then append whatever else exists
             full_order = final_column_order + [c for c in cols_existing if c not in final_column_order]
-            # Filter out duplicates if any
             full_order = list(dict.fromkeys(full_order))
             
             df_final = df_final.reindex(columns=full_order)
@@ -1574,8 +1196,31 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
         print(f"\n{C_RED}[ERROR] Excel file is open! Saving to CSV backup.{C_RESET}")
         df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
     except Exception as e:
-        print(f"{C_YELLOW}[Warning] Excel error: {e}. Saving to CSV backup.{C_RESET}")
-        df_new.to_csv(f"logs/backup_{timestamp}.csv", index=False)
+        if getattr(args, 'model', 'vanilla') == 'multihead':
+            head_num = len(getattr(args, 'heads_config', []))
+        else:
+            head_num = 1
+        print(f"{C_YELLOW}[Warning] Excel error: {e}. SAttempting CSV backup with retries...{C_RESET}")
+        
+        # Unique backup name per run to prevent overwriting
+        backup_folder = os.path.join(logs_dir, "backups")
+        os.makedirs(backup_folder, exist_ok=True)
+        
+        backup_name = os.path.join(backup_folder, f"backup_{timestamp}_{h_count}heads_run{getattr(args, 'run', 0)}.csv")
+        
+        
+        # RETRY LOOP
+        for attempt in range(5): 
+            try:
+                df_new.to_csv(backup_name, index=False)
+                print(f"{C_GREEN}[Success] Backup saved to {backup_name} on attempt {attempt+1}{C_RESET}")
+                return model_filename # Successfully exited
+            except Exception as save_error:
+                wait = random.uniform(2, 7) # Avoid synchronized retries
+                print(f"Save attempt {attempt+1} failed ({save_error}). Retrying in {wait:.1f}s...")
+                time.sleep(wait)
+        
+        print(f"{C_RED}CRITICAL: Could not save results for run {getattr(args, 'run', 0)} after 5 attempts.{C_RESET}")
 
     log_filename = "logs/experiment_log.txt"
     log_entry = f"[{timestamp}] {args.model:<10} {args.optimizer:<8}| F={len(args.features):<2} W={args.window_size:<2} H={args.horizon:<2} | Circuit: {str(final_encoding):<10} {str(final_ansatz):<56} {str(final_entangle):<36} reps={str(final_reps):<15} | MSE={m_test.get('Step_MSE', 0):.4f}\n"
@@ -1584,80 +1229,9 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     print(f"\n[Logger] Model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
     return model_filename
-# def find_existing_experiment(current_args, models_root="models"):
-    # """
-    # Scans ALL .pkl files in the models/ directory (recursive).
-    # Checks if an experiment with the EXACT same configuration (including seed) exists.
-    # Returns: (found_path, saved_data) or (None, None)
-    # """
-    # print(f"{C_BLUE}[Cache Search] Scanning for existing matches in {models_root}...{C_RESET}")
-    
-    # # 1. Recursive glob to find all pickles in subfolders
-    # all_pkls = glob.glob(os.path.join(models_root, "**", "*.pkl"), recursive=True)
-    
-    # # Define keys that MUST match to consider it the "same experiment"
-    # # We exclude 'data' path (in case you moved folders) and 'save_dir'
-    # critical_keys = [
-    #     'run', 
-    #     'window_size', 
-    #     'horizon', 
-    #     'features', 
-    #     'model', 
-    #     'predict',      # Important: affects output targets
-    #     'optimizer', 
-    #     'learning_rate', 
-    #     'batch_size', 
-    #     'maxiter',
-    #     'perturbation', # SPSA specific parameter
-    #     'tolerance',    # COBYLA specific parameter
-    #     'weights',      # Loss function weights
-    #     'initialization', # <--- Added as requested
-    #     'ansatz', 
-    #     'entangle', 
-    #     'reps', 
-    #     'encoding', 
-    #     'map', 
-    #     'reorder',
-    #     'heads_config'  # Crucial for multihead architecture
-    # ]
-
-    # for pkl_path in all_pkls:
-    #     try:
-    #         # Optimization: Skip loading if filename looks totally different
-    #         # (Optional, but speeds things up if filenames contain hints)
-            
-    #         with open(pkl_path, 'rb') as f:
-    #             data = pickle.load(f)
-            
-    #         saved_config = data.get('config', {})
-            
-    #         # Compare Critical Keys
-    #         match = True
-    #         for key in critical_keys:
-    #             val_current = getattr(current_args, key, None)
-    #             val_saved = saved_config.get(key, None)
-                
-    #             # Handle Lists (like heads_config) carefully
-    #             if str(val_current) != str(val_saved):
-    #                 match = False
-    #                 break
-            
-    #         if match:
-    #             print(f"{C_GREEN}[Cache Search] MATCH FOUND!{C_RESET}")
-    #             print(f"   > Existing File: {pkl_path}")
-    #             return pkl_path, data
-
-    #     except Exception as e:
-    #         # Corrupted pickle or version mismatch, skip it
-    #         continue
-            
-    # print(f"{C_YELLOW}[Cache Search] No match found. Proceeding to training.{C_RESET}")
-    # return None, None
 def find_existing_experiment(current_args, models_root="models"):
     print(f"{C_BLUE}[Cache Search] Scanning {models_root} (including all subfolders)...{C_RESET}")
     all_pkls = glob.glob(os.path.join(models_root, "**", "*.pkl"), recursive=True)
-    
-    # These are the keys that MUST match
     critical_keys = [
         'run', 'window_size', 'horizon', 'model', 'predict', 
         'optimizer', 'batch_size', 'maxiter', 'learning_rate', 
@@ -1675,28 +1249,19 @@ def find_existing_experiment(current_args, models_root="models"):
             test_m = data.get('test_metrics') or data.get('final_eval_metrics') or {}
             history = data.get('train_history') or []
             weights = data.get('final_weights') or data.get('selected_weights')
-
-            # If metrics are empty or training didn't actually happen (len=0), ignore it
             if not test_m or len(history) < 10 or weights is None:
-                # print(f"{C_YELLOW}[Cache] Skipping incomplete file: {os.path.basename(pkl_path)}{C_RESET}")
                 continue
             match = True
             
             for key in critical_keys:
                 val_curr = getattr(current_args, key, None)
                 val_saved = saved_config.get(key, None)
-
-                # Normalize to strings for comparison (handles list vs tuple and whitespace)
                 s_curr = str(val_curr).replace(" ", "").replace("'", '"')
                 s_save = str(val_saved).replace(" ", "").replace("'", '"')
-
-                # Special handling for Floats (Rounding to 5 decimals)
                 if isinstance(val_curr, float):
                     if round(val_curr, 5) != round(val_saved, 5):
                         match = False ; break
                 elif s_curr != s_save:
-                    # --- UNCOMMENT THE LINE BELOW TO DEBUG FAILURES ---
-                    # print(f"DEBUG: Mismatch in '{key}':\n  YAML: {s_curr}\n  PKL:  {s_save}")
                     match = False
                     break
             
@@ -1715,7 +1280,6 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
     Saves detailed results specifically for Classical Models (LSTM/RNN).
     Standardized to match Quantum experiment directory structure.
     """
-    # Fix 1: Ensure directories are based on the save_dir argument
     save_dir = getattr(args, 'save_dir', 'classical_baselines')
     models_dir = os.path.join("models", save_dir)
     logs_dir = os.path.join("logs", save_dir)
@@ -1723,21 +1287,15 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
 
     for folder in [models_dir, logs_dir, figs_dir]:
         os.makedirs(folder, exist_ok=True)
-
-    # Use provided excel_path or default to the logs_dir
     excel_filename = excel_path if excel_path else os.path.join(logs_dir, "classical_experiments_summary.xlsx")
-    
-    # Fix 2: Construct the filename once using the correct directory
     model_name = f"{timestamp}_classical_f{len(args.features)}_w{args.window_size}_h{args.horizon}_hidd{args.hidden_size}.pkl"
     model_filename = os.path.join(models_dir, model_name)
 
     selected_w = train_results.get('selected_weights', train_results['final_weights'])
     total_params = sum(p.numel() for p in selected_w.values())
-    
-    # 2. Save Model (Pickle)
     save_payload = {
         "config": vars(args),
-        "best_weights": train_results.get('best_weights'), # Use .get to avoid KeyError
+        "best_weights": train_results.get('best_weights'), 
         "final_weights": train_results.get('final_weights'),
         "selected_weights": selected_w,
         "weight_selection_method": selection_type,
@@ -1832,7 +1390,6 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
     if os.path.exists(excel_filename):
         try:
             df_existing = pd.read_excel(excel_filename)
-            # Use map instead of applymap (deprecated in newer pandas)
             df_existing = df_existing.map(normalize_loaded_bools)
             df_final = pd.concat([df_existing, df_new], ignore_index=True)
             df_final.to_excel(excel_filename, index=False)
@@ -1859,13 +1416,10 @@ def load_experiment_results(filepath, final = True):
         data = pickle.load(f)
         
     config = data.get('config', {})
-    # m_best = data.get('best_eval_metrics', {})
     if 'test_metrics' in data:
         m_final = data['test_metrics']
     else:
-        # Fallback for older files
         m_final = data.get('final_eval_metrics', data.get('best_eval_metrics', {}))
-    # Model type detection fallback
     if config.get('model') is None:
         if 'classical' in filepath.lower() or 'hidden_size' in config:
             config['model'] = 'classical_lstm'
@@ -1887,9 +1441,7 @@ def load_experiment_results(filepath, final = True):
             'map': resolve_multi_val([h.get('map', config.get('map')) for h in heads])
         }
     else:
-        # Standard fallback for vanilla models
         summary_params = {k: str(config.get(k, 'N/A')) for k in ['reps', 'ansatz', 'entangle', 'encoding', 'map']}
-    # --- Print Summary Header ---
     print("\n" + "="*120)
     print(f"EXPERIMENT SUMMARY {'(MULTI-HEAD)' if is_multi else ''}")
     print("="*120)
@@ -1903,7 +1455,6 @@ def load_experiment_results(filepath, final = True):
     print(f"Timestamp: {timestamp}")
     selection_method = data.get('weight_selection_method', 'Unknown')
     print(f"Weights Selected: {selection_method}")
-    # --- Configuration ---
     print("\n--- Configuration ---")
     common_keys = ['model', 'features', 'window_size', 'horizon', 'optimizer']
     quantum_keys = ['ansatz', 'encoding', 'reps', 'entangle']
@@ -1934,22 +1485,14 @@ def load_experiment_results(filepath, final = True):
             val = metrics.get(key)
             if val is None: return "N/A"
             return f"{val:.6f}" if isinstance(val, (int, float)) else str(val)
-
-        # Aggregate Row 1
         print(f"Step MSE: {get_fmt(m_final, 'Step_MSE'):<12} | Step R2: {get_fmt(m_final, 'Step_R2'):<12} | Local MSE: {get_fmt(m_final, 'Local_MSE')}")
         print("-" * 120)
-        # Aggregate Row 2
         print(f"Global OPEN   -> MSE: {get_fmt(m_final, 'Global_open_MSE'):<10} | R2: {get_fmt(m_final, 'Global_open_R2')}")
         print(f"Global CLOSED -> MSE: {get_fmt(m_final, 'Global_closed_MSE'):<10} | R2: {get_fmt(m_final, 'Global_closed_R2')}")
 
         # --- DETAILED PER-TARGET TABLE ---
         print("\n--- Detailed Breakdown per Target (All Phases) ---")
-        
-        # Define Columns
         headers = ["TARGET", "Step MSE", "Step R2", "Loc MSE", "Open MSE", "Open R2", "Clos MSE", "Clos R2"]
-        
-        # Print Header
-        # Adjust spacing: 16 for name, 9 for short numbers
         header_str = "{:<16} | {:<9} {:<9} | {:<9} | {:<9} {:<9} | {:<9} {:<9}".format(*headers)
         print("-" * len(header_str))
         print(header_str)
@@ -1957,7 +1500,6 @@ def load_experiment_results(filepath, final = True):
 
         base_names = ["Surge_Velocity", "Sway_Velocity", "Yaw_Rate", "Yaw_Angle"]        
         for tgt in base_names:
-            # Helper to safely get metric for this specific target
             def t_get(metric_suffix):
                 key = f"{tgt}_{metric_suffix}"
                 val = m_final.get(key)
@@ -1968,7 +1510,7 @@ def load_experiment_results(filepath, final = True):
                 return f"{val:.5f}" if isinstance(val, (int, float)) else str(val)
 
             row_vals = [
-                tgt.replace("_", " "), # Name
+                tgt.replace("_", " "),
                 t_get("Step_MSE"),
                 t_get("Step_R2"),
                 t_get("Local_MSE"),
@@ -1983,7 +1525,6 @@ def load_experiment_results(filepath, final = True):
     else:
         print("Metric data missing in file.")
 
-    # --- Training Stats ---
     print("\n--- Training Stats ---")
     train_hist = data.get('train_history', [])
     val_hist = data.get('val_history', [])
@@ -2035,33 +1576,24 @@ def _ensure_dir_exists(filename):
 def plot_convergence(args, results, filename=None):
     train_loss = results['train_history']
     val_loss = results['val_history']
-    
-    # Consistent Size (12, 8)
     fig, ax1 = plt.subplots(figsize=(12, 8))
     iterations = range(1, len(train_loss) + 1)
     
     ax1.set_xlabel(r"$\mathit{Iterations}$", **label_style)
     ax1.set_yscale('log')
-    # Thicker grid
     ax1.grid(True, which="both", ls="--", alpha=0.5, linewidth=1.0)
     
     use_dual_axis = (args.reconstruct_train != args.reconstruct_val)
-    
-    # Colors (Standard high contrast if 'colors' not avail)
-    c_train = '#1f77b4' # Tab:Blue equivalent
-    c_val = '#ff7f0e'   # Tab:Orange equivalent
+    c_train = '#1f77b4'
+    c_val = '#ff7f0e'  
     
     if use_dual_axis:
-        
-        # Plot Train (Left Axis)
         ylabel_train = r"$\mathit{Train\ MSE\ (Reconstructed)}$" if args.reconstruct_train else r"$\mathit{Train\ MSE\ (Normalized)}$"
         ax1.set_ylabel(ylabel_train, color=c_train, **label_style)
         ax1.plot(iterations, train_loss, color=c_train, alpha=0.6, linewidth=2.0, label='Train Loss')
         ax1.tick_params(axis='y', labelcolor=c_train)
         t_min, t_max = min(train_loss), max(train_loss)
         ax1.set_ylim([t_min * 0.5, t_max * 2.0])
-
-        # Plot Val (Right Axis)
         ax2 = ax1.twinx()
         ylabel_val = r"$\mathit{Val\ MSE\ (Reconstructed)}$" if args.reconstruct_val else r"$\mathit{Val\ MSE\ (Normalized)}$"
         ax2.set_ylabel(ylabel_val, color=c_val, **label_style)
@@ -2090,14 +1622,12 @@ def plot_convergence(args, results, filename=None):
         title_suffix = "(Single Axis)"
 
     _force_ticks_font(ax1)
-    
-    # Standard Title with Pad
     plt.title(f"Convergence Plot: {args.optimizer.upper()} {title_suffix}", pad=20, **title_style)
     
     fig.tight_layout()
     
     if filename and args.save_plot:
-        _ensure_dir_exists(filename)  # <--- FIXED HERE
+        _ensure_dir_exists(filename)
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"Convergence plot saved to {filename}")
     if args.show_plot: plt.show()
@@ -2111,13 +1641,12 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
     Plots short horizon predictions branching off the true path for all 4 targets.
     Replaces: plot_horizon_branches
     """
-    true_path = data['true_backbone'] # (N, 4)
-    pred_path = data['local']['pred_path'] # (N, H, 4)
+    true_path = data['true_backbone']
+    pred_path = data['local']['pred_path'] 
     time_steps = np.arange(len(true_path))
 
     if horizons is None:
         horizons = [args.horizon]
-    # If single int, convert to list
     elif isinstance(horizons, (int, float)):
         horizons = [int(horizons)]
 
@@ -2131,8 +1660,6 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
     
     fig = plt.figure(figsize=(7 * cols, 5 * rows))
     gs = gridspec.GridSpec(rows, cols, hspace=0.3, wspace=0.25)
-
-    # Map standard units
     unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
     
     targets = []
@@ -2141,13 +1668,9 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
         targets.append({"name": t_name, "unit": u, "idx": i})
     
     axes = []
-    
-    # 1. Setup Axes and Plot Background Truth
     for i, target in enumerate(targets):
         row, col = i // 2, i % 2
         ax = fig.add_subplot(gs[row, col])
-        
-        # Plot continuous True Path in background
         ax.plot(time_steps, true_path[:, target['idx']], 'k-', linewidth=1.5, alpha=0.3, label='True Path')
         
         ax.set_title(target['name'], **subtitle_style)
@@ -2155,8 +1678,6 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
         if row == 1: ax.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
         ax.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
         axes.append(ax)
-
-    # 2. Plot Branches
     num_samples = pred_path.shape[0]
     if 'colors' in globals() and len(colors) > 0:
         color_list = colors
@@ -2164,32 +1685,17 @@ def plot_kinematics_branches(args, data, horizons=[1,5],step_interval=20, filena
         color_list = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
 
     for i in range(0, num_samples, step_interval):
-        # Loop through requested horizons (e.g. 5, then 1)
         for h_idx, h in enumerate(horizons):
-            
-            # Create time indices for this specific branch length
             t_indices = np.arange(i, i + h + 1)
             if t_indices[-1] >= len(time_steps): continue
-            
-            # Get the branch data: Start at true[i], then append preds up to step h
             curr_true = true_path[i].reshape(1, -1)
-            curr_pred = pred_path[i, :h, :] # Slice: take only first h steps
+            curr_pred = pred_path[i, :h, :]
             branch_data = np.vstack([curr_true, curr_pred]) # (h+1, 4)
-
-            # Pick color: Cycle through colors based on horizon index
-            # If 'colors' exists globally use it, else fallback
             c = color_list[(h_idx + 1) % len(color_list)]
 
-            # Plot on all 4 subplots
             for idx, ax in enumerate(axes):
-                # Legend logic: Only label the first branch of the first timestep
                 lbl = f'Pred (H={h})' if (i == 0 and idx == 0) else ""
-                
-                # Plot
-                ax.plot(t_indices, branch_data[:, idx], color=c, 
-                        linestyle='-', linewidth=1.5, alpha=0.8, label=lbl if idx==0 else "")
-
-    # Add legend to first plot (it will contain entries for True Path and each Horizon length)
+                ax.plot(t_indices, branch_data[:, idx], color=c, linestyle='-', linewidth=1.5, alpha=0.8, label=lbl if idx==0 else "")
     axes[0].legend(prop=legend_prop if 'legend_prop' in globals() else None)
     
     for ax in axes: 
@@ -2213,18 +1719,9 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], 
     """
     if isinstance(horizon_steps, (int, float)):
         horizon_steps = [int(horizon_steps)]
-    
-    # Sort so legend is orderly
     horizon_steps.sort()
-    # 1. Extract Data
-    # true_backbone shape expected: (N, 4) -> [Surge, Sway, Yaw Rate, Yaw Angle]
     true_data = data['true_backbone'] 
-    
-    # pred_path shape expected: (N, Horizon, 4)
-    # We extract the specific horizon step 'k' to get a continuous trajectory (N, 4)
     raw_pred = data['global'][loop]['pred_path']
-
-    # 2. Setup Figure
     num_targets = len(args.targets)
     cols = 2
     rows = math.ceil(num_targets / cols)
@@ -2234,23 +1731,17 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], 
     
     unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
     targets = [{"name": t, "unit": unit_map.get(t, ""), "idx": i} for i, t in enumerate(args.targets)]
-
-    # 3. Loop through the 4 targets and plot
     axes = []
     for i, target in enumerate(targets):
         row, col = i // 2, i % 2
         ax = fig.add_subplot(gs[row, col])
-        
-        # Plot True
         time_steps_true = np.arange(len(true_data))
         ax.plot(time_steps_true, true_data[:, target['idx']], 'k-', linewidth=1.5, alpha=0.4, label='True')
         
         for h_idx, h in enumerate(horizon_steps):
             k = h - 1
             if k >= raw_pred.shape[1]: 
-                continue # Skip if horizon is out of bounds
-
-            # Shift logic to align "k-th step prediction" with "Time t"
+                continue 
             if k == 0:
                 pred_seq = raw_pred[:, k, :]
                 true_seq_aligned = true_data
@@ -2258,34 +1749,22 @@ def plot_kinematics_time_series(args, data, loop='closed', horizon_steps=[1,5], 
             else:
                 pred_seq = raw_pred[:-k, k, :]
                 true_seq_aligned = true_data[k:]
-                start_t = k # Plot offset so X-axis matches reality
+                start_t = k 
 
             min_len = min(len(true_seq_aligned), len(pred_seq))
             pred_seq = pred_seq[:min_len]
-            
-            # Time axis for this specific line
             t_axis = np.arange(start_t, start_t + min_len)
-
-            # Color cycling
             if 'colors' in globals(): c = colors[h_idx % len(colors)]
             else: c = ['#D62728', '#1f77b4', '#2ca02c'][h_idx % 3]
-
-            # Plot Prediction
             ax.plot(t_axis, pred_seq[:, target['idx']], '--', color=c, 
                     linewidth=1.8, alpha=0.9, label=f'Pred (k={h})')
-
-        # Styling
         ax.set_title(target['name'], **subtitle_style)
         ax.set_ylabel(rf"$\mathit{{{target['name'].split()[0]}}}$ [{target['unit']}]", **label_style)
         if row == 1: ax.set_xlabel(r"$\mathit{Time\ Step}$", **label_style)
         ax.grid(True, linestyle='--', alpha=0.5, linewidth=1.0)
         if '_force_ticks_font' in globals(): _force_ticks_font(ax)
         axes.append(ax)
-
-    # Legend on first plot
     axes[0].legend(prop=legend_prop if 'legend_prop' in globals() else None, loc='best')
-
-    # Final Layout
     h_str = ",".join(map(str, horizon_steps))
     fig.suptitle(f"Kinematics Analysis ({loop.capitalize()} - Steps: {h_str})", y=0.96, **title_style)
     
@@ -2309,52 +1788,35 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
     """
     if not getattr(args, 'save_plot', True):
         return # Exit immediately if saving is disabled
-
     if mode not in data: return
     if filename:
         _ensure_dir_exists(filename)
-    # 1. Setup Data
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
-    
-    # Shapes: (N, H, 4)
     pred_deltas_all_h = pred_obj['pred_deltas_denorm']
     true_deltas_all_h = data['true_deltas_denorm']
     pred_path_all_h = pred_obj['pred_path'] 
     true_path_all_h = data['true_path']
-    true_backbone = data['true_backbone'] # Shape (N, 4)
-
-    # Sync lengths
+    true_backbone = data['true_backbone']
     num_points = min(pred_deltas_all_h.shape[0], true_deltas_all_h.shape[0])
     pred_deltas_all_h = pred_deltas_all_h[:num_points]
     true_deltas_all_h = true_deltas_all_h[:num_points]
     pred_path_all_h = pred_path_all_h[:num_points]
     true_path_all_h = true_path_all_h[:num_points]
-    
-    # True path flat (N, 4) used for the bottom plot
     true_path_flat = true_backbone[:num_points]         
     time_steps = np.arange(num_points)
 
     unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
     targets = [{"name": t, "unit": unit_map.get(t, ""), "idx": i} for i, t in enumerate(args.targets)]
-
-    # Ensure output directory exists (handles the 'compare_error' subfolder)
     if filename:
         _ensure_dir_exists(filename)
-
-    # 2. Iterate over each Target to create separate plots
     for tgt in targets:
         idx = tgt['idx']
         t_name = tgt['name']
         t_unit = tgt['unit']
-        
-        # Calculate Errors for this SPECIFIC target
-        # Abs difference: (N, H)
         raw_step_errors = np.abs(true_deltas_all_h[:, :, idx] - pred_deltas_all_h[:, :, idx])
         raw_pos_errors  = np.abs(true_path_all_h[:, :, idx] - pred_path_all_h[:, :, idx])
         max_h = raw_step_errors.shape[1]
-
-        # Prepare Tasks (Mean, Max, or Specific Horizon)
         tasks = []
         if isinstance(horizon_mode, (str, int)): horizon_mode_list = [horizon_mode]
         else: horizon_mode_list = horizon_mode
@@ -2368,19 +1830,15 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
                 k = h - 1
                 if k < max_h:
                     tasks.append( (f"H{h}", raw_step_errors[:, k], raw_pos_errors[:, k]) )
-
-        # --- PLOTTING ---
         fig = plt.figure(figsize=(12, 10))
         gs = gridspec.GridSpec(2, 1, height_ratios=[1, 1], hspace=0.3)
-
-        # A. Top Plot: Accumulated vs Net Error
         ax_top_left = plt.subplot(gs[0])
         ax_top_right = ax_top_left.twinx()
 
         num_lines = len(tasks)
         if num_lines == 1:
-            colors_acc = ['#D62728'] # Red
-            colors_net = ['#1F77B4'] # Blue
+            colors_acc = ['#D62728'] 
+            colors_net = ['#1F77B4'] 
         else:
             colors_acc = [cm.Reds(x) for x in np.linspace(0.5, 1.0, num_lines)]
             colors_net = [cm.Blues(x) for x in np.linspace(0.5, 1.0, num_lines)]
@@ -2388,18 +1846,10 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
         lines_legend = []
         for i, (label, s_err, p_err) in enumerate(tasks):
             accumulated_error = np.cumsum(s_err)
-            
-            # Left Axis: Accumulated
-            l1, = ax_top_left.plot(time_steps, accumulated_error, color=colors_acc[i], 
-                                   alpha=0.9, linewidth=2.5, label=f'Acc Error ({label})')
-            
-            # Right Axis: Net
-            l2, = ax_top_right.plot(time_steps, p_err, color=colors_net[i], 
-                                    alpha=0.7, linewidth=2.0, linestyle='--', label=f'Net Error ({label})')
+            l1, = ax_top_left.plot(time_steps, accumulated_error, color=colors_acc[i], alpha=0.9, linewidth=2.5, label=f'Acc Error ({label})')
+            l2, = ax_top_right.plot(time_steps, p_err, color=colors_net[i], alpha=0.7, linewidth=2.0, linestyle='--', label=f'Net Error ({label})')
             
             lines_legend.extend([l1, l2])
-
-        # Styling Top
         ax_top_left.set_ylabel(rf"$\mathit{{Accumulated\ Error}}$ [{t_unit}]", color=colors_acc[0], **label_style)
         ax_top_left.tick_params(axis='y', labelcolor=colors_acc[0])
         ax_top_left.grid(True, linestyle=':', alpha=0.6, linewidth=1.5)
@@ -2413,12 +1863,8 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
         ax_top_left.set_title(f"{t_name}: Error Analysis ({mode.capitalize()} - {loop} - {horizon_str})", pad=20, **title_style)
         ax_top_left.set_xlim(0, num_points)
         ax_top_left.set_ylim(bottom=0); ax_top_right.set_ylim(bottom=0)
-
-        # B. Bottom Plot: True Path of this Target
         ax_bot = plt.subplot(gs[1])
-        c_path = '#2CA02C' # Green
-
-        # Plot the single feature trajectory
+        c_path = '#2CA02C' 
         ax_bot.plot(time_steps, true_path_flat[:, idx], color=c_path, linewidth=2.5, label=f'True {t_name}')
 
         ax_bot.set_ylabel(rf"$\mathit{{{t_name}}}$ [{t_unit}]", color='k', **label_style)
@@ -2435,7 +1881,6 @@ def plot_kinematics_errors(args, data, mode='global', loop='closed', horizon_mod
 
         # --- SAVING ---
         if args.save_plot and filename:
-            # Construct filename: .../plot_error_vs_time_Surge_Velocity_global_closed.png
             clean_name = t_name.replace(" ", "_")
             
             if horizon_mode != ['mean'] and horizon_mode != ['max']:
@@ -2464,73 +1909,44 @@ def plot_kinematics_boxplots(args, data, mode='global', loop='closed', filename=
     """
     if mode == 'local': pred_obj = data[mode]
     else: pred_obj = data[mode][loop]
-    
-    # 1. Get Real Data (Physical Units)
     pred_path = pred_obj['pred_path'] 
     true_path = data['true_path']
-    
     num_samples = min(pred_path.shape[0], true_path.shape[0])
-    
-    # Calculate Absolute Error per component: Shape (N, H, 4)
     abs_error = np.abs(true_path[:num_samples] - pred_path[:num_samples])
-    
     horizon_steps = abs_error.shape[1]
     num_targets = len(args.targets)
     cols = 2
     rows = math.ceil(num_targets / cols)
-    # 2. Setup Figure (2x2 Grid)
     fig = plt.figure(figsize=(7*cols, 5*rows))
     gs = gridspec.GridSpec(rows, cols, hspace=0.3, wspace=0.25)
-
     unit_map = {"Surge Velocity": "m/s", "Sway Velocity": "m/s", "Yaw Rate": "rad/s", "Yaw Angle": "rad"}
     targets = [{"name": t, "unit": unit_map.get(t, ""), "idx": i} for i, t in enumerate(args.targets)]
-
-    # 3. Loop through targets
     for i, tgt in enumerate(targets):
         row, col = i // 2, i % 2
         ax = fig.add_subplot(gs[row, col])
-        
         idx = tgt['idx']
-        
-        # Prepare Data for Boxplot: List of (N,) arrays, one per horizon step
-        # Extract error for specific feature 'idx'
         feature_error = abs_error[:, :, idx] 
         plot_data = [feature_error[:, k] for k in range(horizon_steps)]
-        
-        # Calculate Mean for the Diamond marker
         step_means = np.mean(feature_error, axis=0)
-
-        # Draw Boxplot
         box = ax.boxplot(plot_data, patch_artist=True, showfliers=False, widths=0.6,
                          medianprops=dict(linewidth=2.0, color='#000080')) # Navy Median
-        
-        # Style Boxes
         c_face = '#ADD8E6' # Light Blue
         c_edge = '#1F77B4' # Dark Blue
         for patch in box['boxes']:
             patch.set_facecolor(c_face)
             patch.set_edgecolor(c_edge)
             patch.set_alpha(0.7)
-            
-        # Plot Mean Markers
         x_pos = np.arange(1, horizon_steps + 1)
         ax.plot(x_pos, step_means, marker='D', color='#D62728', linestyle='None', 
                 markersize=6, label='Mean Error')
-
-        # Labels & Grid
         ax.set_title(tgt['name'], **subtitle_style)
         ax.set_ylabel(rf"$\mathit{{Abs\ Error}}$ [{tgt['unit']}]", **label_style)
-        
-        # Only X-label on bottom rows
         if row == 1: 
             ax.set_xlabel(r"$\mathit{Horizon\ Step}$", **label_style)
-            
         ax.grid(True, linestyle='--', alpha=0.5)
         if '_force_ticks_font' in globals(): _force_ticks_font(ax)
 
-    # Add Legend to the first plot only (to avoid clutter)
-    # Creating a custom legend handle for the box
-    from matplotlib.patches import Patch
+
     legend_elements = [
         Patch(facecolor='#ADD8E6', edgecolor='#1F77B4', label='IQR (Distribution)'),
         Line2D([0], [0], color='#000080', linewidth=2.0, label='Median'),

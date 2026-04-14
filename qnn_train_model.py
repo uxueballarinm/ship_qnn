@@ -243,7 +243,8 @@ if __name__=="__main__":
     parser.add_argument('-y', '--horizon', type=int, default=5) # 1,3,5
     
     # Target Options
-    parser.add_argument('--predict', type=str, default='motion', choices=['delta', 'motion','motion_without_surge'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
+    parser.add_argument('--predict', type=str, default='motion', choices=['delta', 'motion', 'custom'], help="Target: 'delta' (simple steps) or 'motion' (kinematic variables)")
+    parser.add_argument('--custom_targets', type=str, nargs='+', help="Custom target variable names (after mapping with map_names). Overrides --predict if provided.")
     parser.add_argument('--norm', type = str2bool, default=True, choices = [True, False], help="Normalize targets to [-1, 1]") # Don't normalize NOTE maybe normalize for a classical layer that goes before the redout if we add 
     parser.add_argument('-rt', '--reconstruct_train', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
     parser.add_argument('-rv', '--reconstruct_val', type = str2bool, choices=[True, False], default=False, help="If True, calculates loss on the reconstructed trajectory (meters)")
@@ -282,24 +283,54 @@ if __name__=="__main__":
         with open(args.config, 'r') as f:
             config_content = yaml.safe_load(f)
             
-        if isinstance(config_content, dict):
-            config_list = [config_content]
+        config_list = config_content if isinstance(config_content, list) else [config_content]
+        
+        # If we have specific indices (like from your Slurm script)
+        if args.indices:
+            # We iterate through whatever indices were passed. 
+            # In your Slurm case, this will usually just be ONE number.
+            for idx_to_run in args.indices:
+                target_idx = idx_to_run - 1 # Convert 1-based to 0-based
+                if 0 <= target_idx < len(config_list):
+                    print(f"\n{C_BLUE}--- [Targeted Run] Experiment {idx_to_run}/{len(config_list)} ---{C_RESET}")
+                    config_dict = config_list[target_idx]
+                    current_args = argparse.Namespace(**vars(args))
+                    for k, v in config_dict.items():
+                        setattr(current_args, k, v)
+                    run(current_args)
+                else:
+                    print(f"{C_RED}Error: Index {idx_to_run} is out of range.{C_RESET}")
         else:
-            config_list = config_content
-        print(f"Loaded {len(config_list)} experiments from YAML.")
-        for i, config_dict in enumerate(config_list):
-            exp_idx = i + 1 # 1-based indexing for the user
-            if args.indices and exp_idx not in args.indices:
-                continue
-            print(f"\n--- Running Experiment {i+1}/{len(config_list)} ---")
-                
-            # Merge CLI args with YAML config
-            # CLI args (like save_dir) should override YAML if provided explicitly,
-            # but usually YAML drives the experiment params.
-            current_args = argparse.Namespace(**vars(args))
-            for k, v in config_dict.items():
-                setattr(current_args, k, v)
+            # Traditional behavior: Run everything in the file
+            print(f"No indices specified. Running all {len(config_list)} experiments.")
+            for i, config_dict in enumerate(config_list):
+                print(f"\n--- Running Experiment {i+1}/{len(config_list)} ---")
+                current_args = argparse.Namespace(**vars(args))
+                for k, v in config_dict.items():
+                    setattr(current_args, k, v)
+                run(current_args)
+    # if args.config:
+    #     with open(args.config, 'r') as f:
+    #         config_content = yaml.safe_load(f)
             
-            run(current_args)
-    else:
-        run(args)
+    #     if isinstance(config_content, dict):
+    #         config_list = [config_content]
+    #     else:
+    #         config_list = config_content
+    #     print(f"Loaded {len(config_list)} experiments from YAML.")
+    #     for i, config_dict in enumerate(config_list):
+    #         exp_idx = i + 1 # 1-based indexing for the user
+    #         if args.indices and exp_idx not in args.indices:
+    #             continue
+    #         print(f"\n--- Running Experiment {i+1}/{len(config_list)} ---")
+                
+    #         # Merge CLI args with YAML config
+    #         # CLI args (like save_dir) should override YAML if provided explicitly,
+    #         # but usually YAML drives the experiment params.
+    #         current_args = argparse.Namespace(**vars(args))
+    #         for k, v in config_dict.items():
+    #             setattr(current_args, k, v)
+            
+    #         run(current_args)
+    # else:
+    #     run(args)
