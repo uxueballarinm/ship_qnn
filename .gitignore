@@ -29,10 +29,6 @@ experiment_definitions/
 *.yml
 models/
 
-# --- Logs & Data Files ---
-# 1. Allow the logs directory and all its nested subfolders
-logs/**/
-
 # 2. Block .txt and .csv files EVERYWHERE (including inside logs)
 *.txt
 *.csv
