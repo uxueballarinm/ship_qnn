@@ -4,13 +4,13 @@ import os
 
 def smart_merge_backups_final():
     # --- 1. PATH DEFINITIONS ---
-    path_1_heads = r"logs/feature_importance_analysis/yaw_rate/experiments_summary.xlsx"
-    path_2_heads = r"logs/2_head_model_option_2/experiments_summary.xlsx"
-    path_3_heads = r"logs/reduced_features/3_head_model_option_3/experiments_summary.xlsx"
-    
+    path_1_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
+    path_2_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
+    path_3_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
+    path_4_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
     # --- 2. SEARCH LOGIC ---
     # Use recursive search to find ALL backups in any subfolder of 'logs'
-    backup_files = glob.glob("logs/reduced_features/3_head_model_option_3/backups/*.csv", recursive=True)
+    backup_files = glob.glob("logs/after_analysing_features/*.csv", recursive=True)
     
     # Alternatively, if they aren't in folders named 'backups', use:
     # backup_files = glob.glob("logs/**/*.csv", recursive=True)
@@ -24,10 +24,12 @@ def smart_merge_backups_final():
     list_1_heads = []
     list_2_heads = []
     list_3_heads = []
+    list_4_heads = []
+
     files_processed = []
 
     # --- 3. Create the parent directories if they are missing ---
-    for p in [path_1_heads, path_2_heads, path_3_heads]:
+    for p in [path_1_heads, path_2_heads, path_3_heads, path_4_heads]:
         folder = os.path.dirname(p)
         if folder and not os.path.exists(folder):
             print(f"Creating missing directory: {folder}")
@@ -56,6 +58,8 @@ def smart_merge_backups_final():
                     list_2_heads.append(df)
                 elif num_heads == 3:
                     list_3_heads.append(df)
+                elif num_heads == 4:
+                    list_4_heads.append(df)
                 
                 files_processed.append(csv_file)
         except Exception as e:
@@ -66,7 +70,8 @@ def smart_merge_backups_final():
     merge_tasks = [
         (list_1_heads, path_1_heads, "1-HEADS"),
         (list_2_heads, path_2_heads, "2-HEADS"),
-        (list_3_heads, path_3_heads, "3-HEADS")
+        (list_3_heads, path_3_heads, "3-HEADS"),
+        (list_4_heads, path_4_heads, "4-HEADS")
     ]
 
     for current_list, target_path, label in merge_tasks:
