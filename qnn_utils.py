@@ -456,12 +456,20 @@ class WindowEncodingQNN:
         y = np.dot(y, W) + b
         return y.reshape(x.shape[0], self.horizon, self.columns)
     
-    def initialize_parameters(self, strategy):
-
-        if strategy == 'identity': q_params = self.rng.uniform(-0.1, 0.1, size=self.num_q_params)
-        elif strategy == 'uniform': q_params = self.rng.uniform(0, 2*np.pi, size=self.num_q_params) 
+    def initialize_parameters(self, strategy, optimizer_name = 'spsa'):
         limit = np.sqrt(6 / (self.input_dim + self.output_dim))
-        c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
+        if strategy == 'identity':
+            if optimizer_name.lower() == 'spsa':
+                # SPSA: Scale matching is essential for global perturbation
+                q_params = self.rng.uniform(-limit, limit, size=self.num_q_params)
+                c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
+            else:
+                # COBYLA: Stay near identity but provide seed direction
+                q_params = self.rng.uniform(-0.1, 0.1, size=self.num_q_params)
+                c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
+        elif strategy == 'uniform': 
+            q_params = self.rng.uniform(0, 2*np.pi, size=self.num_q_params) 
+            c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
         return np.concatenate([q_params, c_params])
 
 class ClassicalMLP(nn.Module):
@@ -488,15 +496,18 @@ class ClassicalWrapper:
         self.model = torch_model
         self.device = device
         self.num_targets = output_shape[2] if output_shape else 4
-    def initialize_parameters(self, method='uniform'):
+    def initialize_parameters(self, method='uniform', optimizer_name='spsa'):
         total_params = sum(p.numel() for p in self.model.parameters())
-        
-        if method == 'uniform':
-            weights = np.random.uniform(-np.pi, np.pi, total_params)
-        elif method == 'identity':
-            weights = np.zeros(total_params)
+        fan_in = list(self.model.parameters())[0].shape[1] 
+        fan_out = list(self.model.parameters())[-1].shape[0]
+        limit = np.sqrt(6 / (fan_in + fan_out))
+        if method == 'identity':
+            weights = np.random.uniform(-limit, limit, total_params)
+        elif method == 'uniform':
+            weights = np.random.uniform(-0.5, 0.5, total_params)
         else:
             weights = np.random.randn(total_params) * 0.1
+            
         self.set_weights(weights)
         return weights
     def get_weights(self):
@@ -541,8 +552,8 @@ class MultiHeadQNN:
             outputs.append(model.forward(x_head, p_head))
         return np.concatenate(outputs, axis=2)
 
-    def initialize_parameters(self, strategy):
-        params_list = [m.initialize_parameters(strategy) for m in self.models]
+    def initialize_parameters(self, strategy, optimizer_name='spsa'):
+        params_list = [m.initialize_parameters(strategy, optimizer_name) for m in self.models]
         return np.concatenate(params_list)
 def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
     num_targets = target.shape[-1]
@@ -661,10 +672,10 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         print(f"  > Mode: Mini-Batch (Size: {batch_size})")
     else:
         print(f"  > Mode: Full-Batch (Size: {num_train_samples})")
-    initial_weights = model.initialize_parameters(args.initialization)
+    initial_weights = model.initialize_parameters(args.initialization, optimizer_name=args.optimizer)
 
     if args.optimizer.upper() == 'COBYLA':
-        opt = COBYLA(maxiter=args.maxiter, tol = args.tolerance)
+        opt = COBYLA(maxiter=args.maxiter, tol = args.tolerance, rhobeg = 0.1)
         res = opt.minimize(fun=objective_function, x0=initial_weights)
     elif args.optimizer.upper() == 'SPSA':
         opt = SPSA(maxiter=args.maxiter,learning_rate=spsa_lr_optimizer, perturbation=args.perturbation) 

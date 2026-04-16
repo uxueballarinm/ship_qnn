@@ -4,14 +4,14 @@ import os
 
 def smart_merge_backups_final():
     # --- 1. PATH DEFINITIONS ---
-    path_1_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
-    path_2_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
-    path_3_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
-    path_4_heads = r"logs/after_analysing_features/experiments_summary.xlsx"
+    path_1_heads = r"logs/reduced_features/3_head_model_option_3/backup/backups/experiments_summary.xlsx"
+    path_2_heads = r"logs/reduced_features/3_head_model_option_3/backup/backups/experiments_summary.xlsx"
+    path_3_heads = r"logs/reduced_features/3_head_model_option_3/backup/backups/experiments_summary.xlsx"
+    path_4_heads = r"logs/reduced_features/3_head_model_option_3/backup/backups/experiments_summary.xlsx"
     # --- 2. SEARCH LOGIC ---
     # Use recursive search to find ALL backups in any subfolder of 'logs'
-    backup_files = glob.glob("logs/after_analysing_features/*.csv", recursive=True)
-    
+    backup_files = glob.glob("logs/reduced_features/3_head_model_option_3/backup/backups/*.csv", recursive=True)
+
     # Alternatively, if they aren't in folders named 'backups', use:
     # backup_files = glob.glob("logs/**/*.csv", recursive=True)
 
