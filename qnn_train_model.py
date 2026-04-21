@@ -1,3 +1,13 @@
+import os
+import sys
+
+# 1. SET ENVIRONMENT VARIABLES BEFORE ANY OTHER IMPORTS
+os.environ['PYTHONHASHSEED'] = '0' 
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
 from qnn_utils import *
 import yaml
 import re
@@ -130,7 +140,7 @@ def run(args):
             
             # --- C. Build Circuit ---
             qc, in_p, w_p = create_multivariate_circuit(head_args)
-            backend = AerSimulator(seed_simulator=seed)
+            backend = AerSimulator(seed_simulator=seed, max_parallel_threads=1,max_parallel_experiments=1, method='statevector') # Ensure deterministic transpilation
             estimator_options = {"run_options": {"shots": None, "seed": seed}, "backend_options": {"seed_simulator": seed}}
             estimator = Estimator(options=estimator_options)
             obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]
@@ -157,7 +167,7 @@ def run(args):
         qnn_dict = combined_params
     elif args.model == 'vanilla':
         qc, input_params, weight_params = create_multivariate_circuit(args)
-        backend = AerSimulator(seed_simulator=seed)
+        backend = AerSimulator(seed_simulator=seed, max_parallel_threads=1,max_parallel_experiments=1, method='statevector') # Ensure deterministic transpilation
         estimator_options = {"run_options": {"shots": None, "seed": seed}, "backend_options": {"seed_simulator": seed}}
         estimator = Estimator(options=estimator_options)
         obsvs = [SparsePauliOp('I' * (qc.num_qubits - 1 - i) + 'Z' + 'I' * i) for i in range(qc.num_qubits)]

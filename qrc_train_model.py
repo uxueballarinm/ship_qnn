@@ -1,3 +1,13 @@
+import os
+import sys
+
+# 1. SET ENVIRONMENT VARIABLES BEFORE ANY OTHER IMPORTS
+os.environ['PYTHONHASHSEED'] = '0' 
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
 from qnn_utils import *
 import yaml
 import re
@@ -38,9 +48,9 @@ class FrozenQNNWrapper:
         self.full_params[self.c_indices] = classical_params
         return self.model.forward(x, self.full_params)
 
-    def initialize_parameters(self, strategy):
-        # We only return the classical part of a fresh initialization for the optimizer
-        full_init = self.model.initialize_parameters(strategy)
+    def initialize_parameters(self, strategy, optimizer_name='spsa'): # Added optimizer_name
+        # Pass it down to the underlying model
+        full_init = self.model.initialize_parameters(strategy, optimizer_name)
         return full_init[self.c_indices]
 
 def run(args):
@@ -112,8 +122,12 @@ def run(args):
             head_args.features = head_feature_names 
             
             qc, in_p, w_p = create_multivariate_circuit(head_args)
-            backend = AerSimulator(seed_simulator=seed)
-            estimator = Estimator(options={"run_options": {"shots": None, "seed": seed}})
+            backend = AerSimulator(seed_simulator=seed,max_parallel_threads=1, max_parallel_experiments=1)
+            estimator_options = {
+                "run_options": {"shots": None, "seed": seed},
+                "backend_options": {"seed_simulator": seed}
+            }
+            estimator = Estimator(options=estimator_options)
             obsvs = [SparsePauliOp('I'*(qc.num_qubits-1-j)+'Z'+'I'*j) for j in range(qc.num_qubits)]
             estimator_qnn = EstimatorQNN(circuit=qc, input_params=in_p, weight_params=w_p, observables=obsvs, estimator=estimator,  pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed))
             
@@ -130,49 +144,81 @@ def run(args):
         qc, in_p, w_p = create_multivariate_circuit(args)
         estimator = Estimator(options={"run_options": {"shots": None, "seed": seed}})
         obsvs = [SparsePauliOp('I'*(qc.num_qubits-1-j)+'Z'+'I'*j) for j in range(qc.num_qubits)]
+        backend = AerSimulator(seed_simulator=seed,max_parallel_threads=1, max_parallel_experiments=1)
         estimator_qnn = EstimatorQNN(circuit=qc, input_params=in_p, weight_params=w_p, observables=obsvs, estimator=estimator,  pass_manager=generate_preset_pass_manager(backend=backend, optimization_level=1, seed_transpiler=seed))
         model = WindowEncodingQNN(estimator_qnn, y_train.shape, seed)
         qnn_dict = {'input_params': in_p, 'weight_params': w_p, 'qc': qc}
 
     # --- WRAPPER LOGIC ---
-    if getattr(args, 'freeze_qnn', False):
-        print(f"{C_YELLOW}>> MODE: Frozen QNN (Reservoir Computing){C_RESET}")
-        initial_full_params = model.initialize_parameters(args.initialization)
-        model_to_train = FrozenQNNWrapper(model, initial_full_params)
-    else:
+    if args.optimizer.lower() == 'ridge':
+        # Ridge only makes sense if the QNN is frozen (Reservoir Computing)
+        print(f"{C_YELLOW}>> MODE: Quantum Reservoir Computing (Ridge Regression){C_RESET}")
+        # alpha is usually controlled by your learning_rate arg
+        results = train_qrc_ridge(args, model, x_train, y_train, x_val, y_val, alpha=args.learning_rate)
         model_to_train = model
+    else:
+        if getattr(args, 'freeze_qnn', False):
+            print(f"{C_YELLOW}>> MODE: Frozen QNN (Iterative Optimization){C_RESET}")
+            initial_full_params = model.initialize_parameters(args.initialization)
+            model_to_train = FrozenQNNWrapper(model, initial_full_params)
+        else:
+            model_to_train = model
 
-    results = train_model(args, model_to_train, x_train, y_train, x_val, y_val, y_scaler)
+        results = train_model(args, model_to_train, x_train, y_train, x_val, y_val, y_scaler)
 
     # Evaluation (Important: use model_to_train for forward passes if it converged early)
-    print("\n[Model Selection] Comparing 'Best' vs 'Final' weights on VALIDATION set...")
-    val_eval_best = evaluate_model(args, model_to_train, results['best_weights'], x_val, y_val, x_scaler, y_scaler)
-    val_eval_final = evaluate_model(args, model_to_train, results['final_weights'], x_val, y_val, x_scaler, y_scaler)
-    
-    score_best = val_eval_best['metrics']['Global_open_MSE']
-    score_final = val_eval_final['metrics']['Global_open_MSE']
-
-    if score_best < score_final:
-        selected_weights_type = "Best (Lowest Val Loss)"
+    if args.optimizer.lower() == 'ridge':
+        # Skip comparison; Ridge is a one-step optimal solver
         selected_weights = results['best_weights']
-        selected_val_metrics = val_eval_best
+        selected_weights_type = "Ridge Optimal"
+        selected_val_metrics = evaluate_model(args, model_to_train, selected_weights, x_val, y_val, x_scaler, y_scaler)
+        best_full_weights = results['best_weights']
+        final_full_weights = results['final_weights']
+        selected_weights_to_save = results['best_weights']
     else:
-        selected_weights_type = "Final (Last Iteration)"
-        selected_weights = results['final_weights']
-        selected_val_metrics = val_eval_final
-    
+        # Iterative comparison (SPSA/COBYLA)
+        print("\n[Model Selection] Comparing 'Best' vs 'Final' weights on VALIDATION set...")
+        val_eval_best = evaluate_model(args, model_to_train, results['best_weights'], x_val, y_val, x_scaler, y_scaler)
+        val_eval_final = evaluate_model(args, model_to_train, results['final_weights'], x_val, y_val, x_scaler, y_scaler)
+        
+        score_best = val_eval_best['metrics']['Global_open_MSE']
+        score_final = val_eval_final['metrics']['Global_open_MSE']
+
+        if score_best < score_final:
+            selected_weights_type = "Best (Lowest Val Loss)"
+            selected_weights = results['best_weights']
+            selected_val_metrics = val_eval_best
+        else:
+            selected_weights_type = "Final (Last Iteration)"
+            selected_weights = results['final_weights']
+            selected_val_metrics = val_eval_final
+        if getattr(args, 'freeze_qnn', False):
+            final_full_weights = np.copy(model_to_train.full_params)
+            final_full_weights[model_to_train.c_indices] = results['final_weights']
+            
+            best_full_weights = np.copy(model_to_train.full_params)
+            best_full_weights[model_to_train.c_indices] = results['best_weights']
+            
+            # Stitch the selected one specifically
+            selected_weights_to_save = np.copy(model_to_train.full_params)
+            selected_weights_to_save[model_to_train.c_indices] = selected_weights
+        else:
+            final_full_weights = results['final_weights']
+            best_full_weights = results['best_weights']
+            selected_weights_to_save = selected_weights
     print(f"  > Selected: {selected_weights_type}")
     test_eval = evaluate_model(args, model_to_train, selected_weights, x_test, y_test, x_scaler, y_scaler)
-    
-    # Reconstruct full vector if frozen for saving
-    if getattr(args, 'freeze_qnn', False):
-        final_full_weights = np.copy(model_to_train.full_params)
-        final_full_weights[model_to_train.c_indices] = selected_weights
-        results['selected_weights'] = final_full_weights
-    else:
-        results['selected_weights'] = selected_weights
+    # Prepare the results dictionary for the saving function
+    train_res = {
+        'train_history': results.get('train_history', [1e-6]),
+        'val_history': results.get('val_history', []),
+        'best_weights': best_full_weights,  
+        'final_weights': final_full_weights,
+        'selected_weights': selected_weights_to_save
+    }
 
-    saved_file = save_experiment_results(args, results, selected_val_metrics, test_eval, [x_scaler, y_scaler], qnn_dict, timestamp, selection_type=selected_weights_type)
+    # IMPORTANT: Update the saving call to use 'train_res' instead of 'results'
+    saved_file = save_experiment_results(args, train_res, selected_val_metrics, test_eval, [x_scaler, y_scaler], qnn_dict, timestamp, selection_type=selected_weights_type,freeze = getattr(args, 'freeze_qnn', False))
     load_experiment_results(saved_file)
 
     if args.save_plot or args.show_plot:
@@ -190,13 +236,15 @@ if __name__=="__main__":
     parser.add_argument('--indices', type=int, nargs='+', default=None)
     parser.add_argument('--save_dir', type=str, default="")
     parser.add_argument('--run', type=int, default=0)
-    parser.add_argument('--data', type=str, default="dataset")
+    parser.add_argument('--data', type=str, default="data/reduce_row_number_absolutes")
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-select', '--select_features', type=str, nargs='+', default=['sv','wv', 'yr','ya','rarad'])
     group.add_argument('-drop', '--drop_features', type=str, nargs='+')
     parser.add_argument('-ws', '--window_size', type=int, default=5)
     parser.add_argument('-y', '--horizon', type=int, default=5)
-    parser.add_argument('--predict', type=str, default='motion', choices=['delta', 'motion','motion_without_surge'])
+    parser.add_argument('--predict', type=str, default='motion', choices=['delta', 'motion', 'custom'])
+    parser.add_argument('--custom_targets', type=str, nargs='+', help="Custom target variable names (after mapping with map_names). Overrides --predict if provided.")
+
     parser.add_argument('--norm', type=str2bool, default=True)
     parser.add_argument('-rt', '--reconstruct_train', type=str2bool, default=False)
     parser.add_argument('-rv', '--reconstruct_val', type=str2bool, default=False)
@@ -209,7 +257,7 @@ if __name__=="__main__":
     parser.add_argument('-init', '--initialization', type=str, default='uniform')
     parser.add_argument('--model', type=str, default='vanilla')
     parser.add_argument('--heads_config', default=None)
-    parser.add_argument('-opt','--optimizer', type=str, default='cobyla')
+    parser.add_argument('-opt','--optimizer', type=str, default='cobyla', choices=['cobyla', 'spsa', 'ridge'])
     parser.add_argument('--maxiter', type=int, default=10000)
     parser.add_argument('-tol', '--tolerance', type=float, default=None)
     parser.add_argument('-lr','--learning_rate', type=float, default=0.01)

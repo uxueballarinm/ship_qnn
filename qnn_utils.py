@@ -26,6 +26,7 @@ from matplotlib.patches import Patch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.linear_model import Ridge
 
 # Data handling
 import pandas as pd
@@ -121,8 +122,8 @@ def sliding_window(x, y, window_size, horizon): # Creates windows from a single 
     return np.array(x_wins), np.array(y_wins)
 
 def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None, fit_scalers=False): # Loads all CSVs from a directory, processes them individually normalizes them (fitting on Train only), and stacks them into a dataset.
-
-    files = glob.glob(os.path.join(directory, "*.csv")) # Assumes all CSV files in the directory are part of the dataset. Adjust if there are non-data CSVs.
+    files = sorted(glob.glob(os.path.join(directory, "*.csv")))
+    #b(os.path.join(directory, "*.csv")) # Assumes all CSV files in the directory are part of the dataset. Adjust if there are non-data CSVs.
     if not files:
         raise ValueError(f"No CSV files found in {directory}")
     
@@ -230,6 +231,8 @@ def _load_and_validate_map(args, config):
     num_padding = config["total_slots"] - config["num_features"]
     canonical_map = np.concatenate([np.arange(config["num_features"]), np.full(num_padding, -1)]).astype(int)
     raw_map = getattr(args, 'map', None)
+    if raw_map is None:
+        return canonical_map, None
     flat_indices = _parse_feature_map(raw_map, args.features)
     n_slots, n_reps = config["total_slots"], args.reps
     
@@ -455,7 +458,12 @@ class WindowEncodingQNN:
         b = c_params[self.input_dim * self.output_dim:]
         y = np.dot(y, W) + b
         return y.reshape(x.shape[0], self.horizon, self.columns)
-    
+    # Inside class WindowEncodingQNN
+    def get_quantum_features(self, x, params_flat):
+        """Extracts expectation values from the quantum part only."""
+        q_params = params_flat[:self.num_q_params]
+        x_flat = x.reshape(x.shape[0], -1)
+        return self.qnn.forward(x_flat, q_params)
     def initialize_parameters(self, strategy, optimizer_name = 'spsa'):
         limit = np.sqrt(6 / (self.input_dim + self.output_dim))
         if strategy == 'identity':
@@ -534,14 +542,29 @@ class MultiHeadQNN:
         self.models = models_list
         self.input_groups = input_indices_list
         self.param_splits = []
-        total = 0
+        total, total_q, total_c = 0, 0, 0 # Track totals
         for m in self.models:
             self.param_splits.append(m.total_params)
             total += m.total_params
+            total_q += m.num_q_params
+            total_c += m.num_c_params
         self.total_params = total
+        self.num_q_params = total_q # FIX: Add missing attribute
+        self.num_c_params = total_c
         print(f"\n[MultiHead] Initialized with {len(self.models)} heads.")
         for i, (n_p, grp) in enumerate(zip(self.param_splits, self.input_groups)):
             print(f"  > Head {i+1}: {n_p} params | Input Indices: {grp}")
+    def get_quantum_features(self, x, params_flat):
+        """Concatenates quantum features from all heads."""
+        all_phi = []
+        param_start = 0
+        for i, (model, input_idx) in enumerate(zip(self.models, self.input_groups)):
+            n_params = model.total_params
+            p_head = params_flat[param_start : param_start + n_params]
+            x_head = x[:, :, input_idx]
+            all_phi.append(model.get_quantum_features(x_head, p_head))
+            param_start += n_params
+        return np.concatenate(all_phi, axis=1)
     def forward(self, x, params):
         outputs = []
         param_start = 0
@@ -582,7 +605,9 @@ def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
         return np.mean(weighted_diff)
 
 def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
+    # Force reset here to ensure SPSA perturbations are identical for the same seed
 
+    # ... rest of the training logic
     best_val_loss = float('inf')
     best_params = None
     
@@ -619,11 +644,12 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
     current_batch_x = None
     current_batch_y = None
     call_counter = 0
+    batch_rng = np.random.default_rng(args.run)
     def objective_function(params):
         nonlocal best_val_loss, best_params, current_batch_x, current_batch_y, call_counter
         if use_batching:
             if call_counter % 2 == 0:
-                indices = np.random.choice(num_train_samples, size=batch_size, replace=False)
+                indices = batch_rng.choice(num_train_samples, size=batch_size, replace=False)
                 current_batch_x, current_batch_y = x_train[indices], y_train[indices]
             
             x_input, y_target = current_batch_x, current_batch_y
@@ -672,6 +698,7 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         print(f"  > Mode: Mini-Batch (Size: {batch_size})")
     else:
         print(f"  > Mode: Full-Batch (Size: {num_train_samples})")
+    qiskit_algorithms.utils.algorithm_globals.random_seed = args.run
     initial_weights = model.initialize_parameters(args.initialization, optimizer_name=args.optimizer)
 
     if args.optimizer.upper() == 'COBYLA':
@@ -690,7 +717,58 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         "train_history": train_history, "val_history": val_history,         
     }
 
+def train_qrc_ridge(args, model, x_train, y_train, x_val, y_val, alpha=1.0):
+    print(f"\n{C_BLUE}[QRC-Ridge] Solving linear readout...{C_RESET}")
+    rng = np.random.default_rng(args.run)
+    model.rng = rng
+    # 1. Initialize random quantum parameters (the reservoir)
+    init_params = model.initialize_parameters(strategy="uniform", optimizer_name=args.optimizer)
+    if hasattr(model, 'models'): # Multi-Head Logic
+        best_params_list = []
+        p_start, t_start = 0, 0
+        
+        for i, m in enumerate(model.models):
+            # A. Extract Head Parts
+            p_head_init = init_params[p_start : p_start + m.total_params]
+            q_head = p_head_init[:m.num_q_params]
+            x_train_h = x_train[:, :, model.input_groups[i]]
+            
+            # B. Get Quantum Features for this head
+            phi_train = m.get_quantum_features(x_train_h, p_head_init)
+            
+            # C. Extract Targets for this head (N, Horizon * Targets_per_head)
+            y_train_h = y_train[:, :, t_start : t_start + m.columns].reshape(y_train.shape[0], -1)
+            
+            # D. Fit Ridge
+            ridge = Ridge(alpha=alpha, random_state = args.run, solver ='cholesky')
+            ridge.fit(phi_train, y_train_h)
+            c_head = np.concatenate([ridge.coef_.T.flatten(), ridge.intercept_.flatten()])
+            
+            # E. Store solved head weights
+            best_params_list.append(np.concatenate([q_head, c_head]))
+            p_start += m.total_params
+            t_start += m.columns
+            
+        best_weights = np.concatenate(best_params_list)
 
+    else: # Vanilla logic
+        q_params = init_params[:model.num_q_params]
+        phi_train = model.get_quantum_features(x_train, init_params)
+        y_train_flat = y_train.reshape(y_train.shape[0], -1)
+        
+        ridge = Ridge(alpha=alpha,random_state = args.run, solver ='cholesky')
+        ridge.fit(phi_train, y_train_flat)
+        c_params = np.concatenate([ridge.coef_.T.flatten(), ridge.intercept_.flatten()])
+        best_weights = np.concatenate([q_params, c_params])
+
+    # Calculate validation MSE for the logger
+    val_preds = model.forward(x_val, best_weights)
+    val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, args.weights, None)
+    
+    return {
+        "best_weights": best_weights, "final_weights": best_weights,
+        "train_history": [0.0], "val_history": [val_mse]
+    }
 
 def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler = None, device='cpu'):
     """
@@ -977,7 +1055,7 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
 # ==============================================================================
 # SAVE AND PLOT RESULTS
 # ==============================================================================
-def save_experiment_results(args, train_results, val_eval, test_eval, scalers, qnn_dict, timestamp, selection_type="Unknown", excel_path=None):
+def save_experiment_results(args, train_results, val_eval, test_eval, scalers, qnn_dict, timestamp, selection_type="Unknown", excel_path=None, freeze=False):
     save_dir = getattr(args, 'save_dir', '')
     models_dir = os.path.join("models", save_dir)
     logs_dir = os.path.join("logs", save_dir)
@@ -1192,6 +1270,7 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
         if os.path.exists(excel_filename):
             df_existing = pd.read_excel(excel_filename)
             df_existing = df_existing.map(normalize_loaded_bools)
+            df_new['freeze'] = str(freeze).lower()
             df_final = pd.concat([df_existing, df_new], ignore_index=True)
             cols_existing = list(df_existing.columns)
             full_order = final_column_order + [c for c in cols_existing if c not in final_column_order]
