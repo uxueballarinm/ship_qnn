@@ -8,29 +8,44 @@ def process_and_plot(input_root, output_root):
     features = ['Rudder Angle (deg)', 'Yaw Rate', 'Yaw Angle', 'Surge Velocity', 'Sway Velocity']
     time_col = 'Time (s)'
 
+    # Convert to Path objects and resolve absolute paths to prevent errors
+    input_root_path = Path(input_root).resolve()
+    output_root_path = Path(output_root).resolve()
+
+    if not input_root_path.exists():
+        print(f"ERROR: Folder not found! Checked: {input_root_path}")
+        print("Please check if the folder name is 'reduce_row_number_cobyla' or 'reduce_row_number_absolute_cobyla'")
+        return
+
+    print(f"Looking for CSVs in: {input_root_path}")
+
+    files_processed = 0
     # Walk through the input directory
-    for root, dirs, files in os.walk(input_root):
+    for root, dirs, files in os.walk(input_root_path):
         for file in files:
             if file.endswith('.csv'):
                 # 1. Construct input path
                 input_path = Path(root) / file
                 
-                # 2. Construct output path (replicate subfolder structure)
-                relative_path = input_path.relative_to(input_root)
-                output_dir = Path(output_root) / relative_path.parent
+                # 2. Construct output path
+                # This part was likely failing locally if paths weren't resolved
+                relative_path = input_path.relative_to(input_root_path)
+                output_dir = output_root_path / relative_path.parent
                 output_dir.mkdir(parents=True, exist_ok=True)
                 
                 output_file = output_dir / f"{input_path.stem}.png"
 
-                print(f"Processing: {input_path} -> {output_file}")
+                print(f"Processing: {relative_path}")
 
                 try:
-                    # 3. Read the data
                     df = pd.read_csv(input_path)
 
-                    # 4. Create the plot
+                    # Create the plot
                     fig, axes = plt.subplots(len(features), 1, figsize=(10, 15), sharex=True)
                     
+                    # If only one feature, axes isn't a list, so we fix that
+                    if len(features) == 1: axes = [axes]
+
                     for i, feature in enumerate(features):
                         if feature in df.columns:
                             axes[i].plot(df[time_col], df[feature], label=feature)
@@ -44,17 +59,19 @@ def process_and_plot(input_root, output_root):
                     plt.suptitle(f"Features vs Time: {file}", fontsize=16)
                     plt.tight_layout(rect=[0, 0.03, 1, 0.97])
 
-                    # 5. Save the plot and close to free memory
+                    # Save and close
                     plt.savefig(output_file)
                     plt.close(fig) 
+                    files_processed += 1
                     
                 except Exception as e:
-                    print(f"Error processing {file}: {e}")
+                    print(f"  Error processing {file}: {e}")
 
-# Define your paths here
-# Use r'' for windows paths to handle backslashes correctly
-input_directory = r'data\reduce_row_number_absolutes'
-output_directory = r'data_plots'
+    print(f"\nDone! Processed {files_processed} files.")
+
+# --- CHECK YOUR FOLDER NAME HERE ---
+# Based on your previous message, the folder is likely:
+input_directory = r'data/reduce_row_number_cobyla' 
+output_directory = r'data_plots_cobyla'
 
 process_and_plot(input_directory, output_directory)
-print("Done!")

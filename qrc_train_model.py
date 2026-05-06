@@ -48,9 +48,9 @@ class FrozenQNNWrapper:
         self.full_params[self.c_indices] = classical_params
         return self.model.forward(x, self.full_params)
 
-    def initialize_parameters(self, strategy, optimizer_name='spsa'): # Added optimizer_name
+    def initialize_parameters(self, strategy, optimizer_name='spsa', trainable_encoding=False, num_features=0): # Added optimizer_name
         # Pass it down to the underlying model
-        full_init = self.model.initialize_parameters(strategy, optimizer_name)
+        full_init = self.model.initialize_parameters(strategy, optimizer_name = optimizer_name, trainable_encoding=trainable_encoding, num_features = num_features)
         return full_init[self.c_indices]
 
 def run(args):
@@ -159,7 +159,7 @@ def run(args):
     else:
         if getattr(args, 'freeze_qnn', False):
             print(f"{C_YELLOW}>> MODE: Frozen QNN (Iterative Optimization){C_RESET}")
-            initial_full_params = model.initialize_parameters(args.initialization)
+            initial_full_params = model.initialize_parameters(args.initialization, optimizer_name = args.optimizer, trainable_encoding=getattr(args, 'trainable_encoding', False), num_features = len(args.features))
             model_to_train = FrozenQNNWrapper(model, initial_full_params)
         else:
             model_to_train = model
@@ -253,6 +253,7 @@ if __name__=="__main__":
     parser.add_argument('--encoding', type=str, default='compact')
     parser.add_argument('--entangle', type=str, default='reverse_linear')
     parser.add_argument('--ansatz', type=str, default='ugates')
+    parser.add_argument('--trainable_encoding', type=str2bool, default=False)
     parser.add_argument('--reps', type=int, default=3)
     parser.add_argument('-init', '--initialization', type=str, default='uniform')
     parser.add_argument('--model', type=str, default='vanilla')
@@ -265,7 +266,7 @@ if __name__=="__main__":
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--weights', type=str, default="[1.0, 1.0, 1.0, 1.0]")
     parser.add_argument('--show_plot', type=str2bool, default=False)
-    parser.add_argument('--save_plot', type=str2bool, default=True)
+    parser.add_argument('--save_plot', type=str2bool, default=False)
     parser.add_argument('--check_existing', type=str2bool, default=False)
     parser.add_argument('--save_in_excel', type=str2bool, default=False)
     parser.add_argument('--use_hadamard', type=str2bool, default=False)

@@ -26,7 +26,7 @@ from matplotlib.patches import Patch
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score, mean_squared_error
-from sklearn.linear_model import Ridge
+
 
 # Data handling
 import pandas as pd
@@ -40,10 +40,12 @@ from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit import ParameterVector
 from qiskit.circuit.library import ZZFeatureMap, PauliFeatureMap, EfficientSU2, ExcitationPreserving, PauliTwoDesign, RealAmplitudes
 from qiskit_aer import AerSimulator
-from qiskit_aer.primitives import EstimatorV2 as Estimator
+from qiskit_aer.primitives import Estimator
 from qiskit.transpiler import generate_preset_pass_manager
 from qiskit_machine_learning.neural_networks import EstimatorQNN
-from qiskit_algorithms.optimizers import SPSA, COBYLA
+from qiskit_algorithms.optimizers import SPSA, COBYLA, ADAM
+from qiskit_algorithms.gradients import ReverseEstimatorGradient
+from qiskit_machine_learning.connectors import TorchConnector
 import qiskit_algorithms
 
 # Logging and warnings
@@ -123,7 +125,7 @@ def sliding_window(x, y, window_size, horizon): # Creates windows from a single 
 
 def prepare_dataset_from_directory(directory, args, x_scaler=None, y_scaler=None, fit_scalers=False): # Loads all CSVs from a directory, processes them individually normalizes them (fitting on Train only), and stacks them into a dataset.
     files = sorted(glob.glob(os.path.join(directory, "*.csv")))
-    #b(os.path.join(directory, "*.csv")) # Assumes all CSV files in the directory are part of the dataset. Adjust if there are non-data CSVs.
+    #files = glob.glob(os.path.join(directory, "*.csv")) # Assumes all CSV files in the directory are part of the dataset. Adjust if there are non-data CSVs.
     if not files:
         raise ValueError(f"No CSV files found in {directory}")
     
@@ -231,8 +233,6 @@ def _load_and_validate_map(args, config):
     num_padding = config["total_slots"] - config["num_features"]
     canonical_map = np.concatenate([np.arange(config["num_features"]), np.full(num_padding, -1)]).astype(int)
     raw_map = getattr(args, 'map', None)
-    if raw_map is None:
-        return canonical_map, None
     flat_indices = _parse_feature_map(raw_map, args.features)
     n_slots, n_reps = config["total_slots"], args.reps
     
@@ -281,14 +281,18 @@ def _get_encoding_config(args):
         "qubits_per_step": qubits_per_step,
         "weights_per_layer": 0
     }
-def _get_params_for_gates(chunk_idx, num_features, input_params, base_idx, rep_indices):
+def _get_params_for_gates(chunk_idx, num_features, input_params, base_idx, rep_indices,  encoding_params=None):
     """Fetches parameters for a U-gate, handling padding."""
     p = []
     for k in range(3):
         slot_idx = chunk_idx * 3 + k # Calculate exactly which slot in the layer map we are accessing
        
         feat_idx = rep_indices[slot_idx]  # Get the feature index mapped to this slot
-        if feat_idx != -1: p.append(input_params[base_idx + feat_idx]) # Valid feature: Read from input parameters
+        if feat_idx != -1: 
+            val = input_params[base_idx + feat_idx]
+            if encoding_params is not None:
+                val = val*encoding_params[feat_idx] # Add any additional encoding parameters if provided (e.g., for parameter repetition)
+            p.append(val) # Valid feature: Read from input parameters
         else: p.append(0.0) # Sentinel -1: Padding/Empty slot -> 0.0 angle
     return p
 def _apply_entanglement(qc, num_qubits, strategy='circular', layer_index=0):
@@ -331,42 +335,42 @@ def _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj,
     
     return weight_idx
 # --- Block Builders ---
-def _build_compact_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
+def _build_compact_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer, encoding_params = None):
 
     for t in range(args.window_size):
         base_idx = t * config["num_features"]
         for chunk_idx in range(config["num_ugates"]):
-            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
+            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices, encoding_params)
             qc.u(p[0], p[1], p[2], t) 
 
     return _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer), current_layer + 1
 
-def _build_parallel_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
+def _build_parallel_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer, encoding_params = None):
     
     for t in range(args.window_size):
         base_idx = t * config["num_features"]
         for chunk_idx in range(config["num_ugates"]):
-            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
+            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices, encoding_params)
             target_qubit = (t * config["qubits_per_step"]) + chunk_idx
             qc.u(p[0], p[1], p[2], target_qubit)
     return _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer), current_layer + 1
 
 # --- STRATEGY 3: SERIAL (Deeper Circuit) ---
-def _build_serial_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
+def _build_serial_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer, encoding_params = None):
     for s in range(config["num_ugates"]):
         for t in range(args.window_size):
             base_idx = t * config["num_features"]
-            p = _get_params_for_gates(s, config["num_features"], input_params, base_idx, rep_indices)
+            p = _get_params_for_gates(s, config["num_features"], input_params, base_idx, rep_indices, encoding_params)
             qc.u(p[0], p[1], p[2], t)
         weight_idx = _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer)
         current_layer += 1
     return weight_idx, current_layer
 
-def _build_accumulated_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer):
+def _build_accumulated_block(qc, args, config, input_params, weight_params, weight_idx, rep_indices, ansatz_obj, current_layer, encoding_params = None):
     for chunk_idx in range(config["num_ugates"]):
         for t in range(args.window_size):
             base_idx = t * config["num_features"]
-            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices)
+            p = _get_params_for_gates(chunk_idx, config["num_features"], input_params, base_idx, rep_indices, encoding_params)
             qc.u(p[0], p[1], p[2], t) 
         _apply_entanglement(qc, qc.num_qubits, strategy=args.entangle, layer_index=current_layer)
     weight_idx = _append_ansatz_and_entangle(qc, args, weight_params, weight_idx, ansatz_obj, config["weights_per_layer"], current_layer, apply_entanglement=False)
@@ -387,14 +391,22 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
     if args.use_hadamard:
         for i in range(config["num_qubits"]): qc.h(i) 
     input_params = ParameterVector('θ', args.window_size * config["num_features"])
-    weight_params = ParameterVector('ω', config["total_physical_layers"] * config["weights_per_layer"])
-    rng = np.random.default_rng(args.run)
-
-    weight_idx = 0
-    current_physical_layer = 0
+    use_trainable = getattr(args, 'trainable_encoding', False)
+    num_lambda = config["num_features"] if use_trainable else 0
+    num_omega = config["total_physical_layers"] * config["weights_per_layer"]
+    weight_params = ParameterVector('ω', num_lambda + num_omega)
+    if use_trainable:
+        encoding_params = weight_params[:num_lambda]
+        ansatz_params = weight_params[num_lambda:]
+    else:
+        encoding_params = None
+        ansatz_params = weight_params
+    
     # Map processing
     rep_indices, per_layer_orders = _load_and_validate_map(args, config)
     full_map_history = []
+    weight_idx = 0
+    current_physical_layer = 0
     for r in range(args.reps):
         # Select Indices
         if per_layer_orders is not None: current_indices = per_layer_orders[r]
@@ -405,19 +417,19 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
         # 4. Build
         if config["strategy"] == 'compact':
             weight_idx, current_physical_layer = _build_compact_block(
-                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, ansatz_params, weight_idx, current_indices, ansatz_obj, current_physical_layer, encoding_params
             )
         elif config["strategy"] == 'serial':
             weight_idx, current_physical_layer = _build_serial_block(
-                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, ansatz_params, weight_idx, current_indices, ansatz_obj, current_physical_layer, encoding_params
             )
         elif config["strategy"] == 'parallel':
             weight_idx, current_physical_layer = _build_parallel_block(
-                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, ansatz_params, weight_idx, current_indices, ansatz_obj, current_physical_layer, encoding_params
             )
         elif config["strategy"] == 'accumulated':
              weight_idx, current_physical_layer = _build_accumulated_block(
-                qc, args, config, input_params, weight_params, weight_idx, current_indices, ansatz_obj, current_physical_layer
+                qc, args, config, input_params, ansatz_params, weight_idx, current_indices, ansatz_obj, current_physical_layer, encoding_params
             )
         
         if barriers: qc.barrier()
@@ -429,7 +441,17 @@ def create_multivariate_circuit(args, barriers=False): #TODO: Check if barriers 
 
     return qc, input_params, weight_params
 
-
+def get_hpc_backend(args, seed):
+    """Returns GPU backend only if optimizer is Adam."""
+    if args.optimizer.lower() == 'adam':
+        print(f"{C_GREEN}[HPC-GPU] Initializing NVIDIA GPU Backend (adjoint)...{C_RESET}")
+        return AerSimulator(
+            method='statevector',
+            device='GPU',
+            cuStateVec_enable=True, # Enable cuQuantum
+            seed_simulator=seed
+        )
+    return AerSimulator(seed_simulator=seed)
 # ==============================================================================
 # 4. MODEL DEFINITIONS & TRAINING
 # ==============================================================================
@@ -458,33 +480,123 @@ class WindowEncodingQNN:
         b = c_params[self.input_dim * self.output_dim:]
         y = np.dot(y, W) + b
         return y.reshape(x.shape[0], self.horizon, self.columns)
-    # Inside class WindowEncodingQNN
-    def get_quantum_features(self, x, params_flat):
-        """Extracts expectation values from the quantum part only."""
-        q_params = params_flat[:self.num_q_params]
-        x_flat = x.reshape(x.shape[0], -1)
-        return self.qnn.forward(x_flat, q_params)
-    def initialize_parameters(self, strategy, optimizer_name = 'spsa'):
+    def initialize_parameters(self, strategy, optimizer_name = 'spsa', trainable_encoding=False, num_features=0):
+        scaling_weights = []
+        is_qrc = str(optimizer_name).lower() == 'ridge'
+        if trainable_encoding:
+            if is_qrc:
+                # Group D: Ridge uses random scaling [0.1, 2.0] for reservoir diversity
+                scaling_weights = [self.rng.uniform(0.1, 2.0, size=num_features)]
+            else:
+                # Group B: SPSA starts at 1.0 to let the optimizer dial it in
+                scaling_weights = [np.ones(num_features)]
         limit = np.sqrt(6 / (self.input_dim + self.output_dim))
+        num_remaining_q = self.num_q_params - (num_features if trainable_encoding else 0)
         if strategy == 'identity':
             if optimizer_name.lower() == 'spsa':
                 # SPSA: Scale matching is essential for global perturbation
-                q_params = self.rng.uniform(-limit, limit, size=self.num_q_params)
+                q_params = self.rng.uniform(-limit, limit, size=num_remaining_q)
                 c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
             else:
                 # COBYLA: Stay near identity but provide seed direction
-                q_params = self.rng.uniform(-0.1, 0.1, size=self.num_q_params)
+                q_params = self.rng.uniform(-0.1, 0.1, size=num_remaining_q)
                 c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
         elif strategy == 'uniform': 
-            q_params = self.rng.uniform(0, 2*np.pi, size=self.num_q_params) 
+            q_params = self.rng.uniform(0, 2*np.pi, size=num_remaining_q) 
             c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
-        return np.concatenate([q_params, c_params])
+        return np.concatenate(scaling_weights + [q_params, c_params])
+class TorchWindowQNN(nn.Module):
+    def __init__(self, qnn, output_shape, seed = 42,device='cuda'):
+        super().__init__()
+        # Wrap QNN into PyTorch
+        self.device = torch.device(device)
+        self.rng = np.random.default_rng(seed)
+        self.quantum_layer = TorchConnector(qnn)
+        
+        # Classical Readout (Linear layer)
+        self.input_dim = qnn.circuit.num_qubits
+        self.output_dim = output_shape[1] * output_shape[2]
+        self.num_q_params = qnn.num_weights
+        self.num_c_params = (self.num_qubits * self.output_dim) + self.output_dim
+        self.total_params = self.num_q_params + self.num_c_params
+        
+        # 3. Classical Readout
+        self.classical_readout = nn.Linear(self.num_qubits, self.output_dim).to(device)
+        self.output_shape = output_shape
+
+    def forward(self, x, params = None):
+        # x: (batch, window, features) -> Flatten for QNNç
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32).to(self.device)
+        x_flat = x.reshape(x.shape[0], -1) 
+        q_out = self.quantum_layer(x_flat)
+        c_out = self.classical_readout(q_out)
+        return c_out.reshape(-1, self.output_shape[1], self.output_shape[2])
+    
+    def set_weights(self, weights):
+        """Explicitly maps flat numpy array to Torch parameters."""
+        with torch.no_grad():
+            w_t = torch.from_numpy(weights).float().to(self.device)
+            
+            # 1. Quantum Weights (λ + ω)
+            # TorchConnector puts weights in a single Parameter called 'weight'
+            self.quantum_layer.weight.copy_(w_t[:self.num_q_params])
+            
+            # 2. Classical Readout (W + b)
+            c_start = self.num_q_params
+            w_limit = c_start + (self.num_qubits * self.output_dim)
+            
+            # Linear Weight matrix
+            W = w_t[c_start : w_limit].view(self.output_dim, self.num_qubits)
+            self.classical_readout.weight.copy_(W)
+            
+            # Linear Bias vector
+            b = w_t[w_limit : w_limit + self.output_dim]
+            self.classical_readout.bias.copy_(b)
+
+    def initialize_parameters(self, strategy, optimizer_name='adam', trainable_encoding=False, num_features=0):
+        """Generates initial weights using the same logic as the classical WindowEncodingQNN."""
+        scaling_weights = []
+        is_qrc = str(optimizer_name).lower() == 'ridge'
+
+        if trainable_encoding:
+            if is_qrc:
+                scaling_weights = [self.rng.uniform(0.1, 2.0, size=num_features)]
+            else:
+                scaling_weights = [np.ones(num_features)]
+        
+        limit = np.sqrt(6 / (self.num_qubits + self.output_dim))
+        num_lambda = num_features if trainable_encoding else 0
+        num_remaining_q = self.num_q_params - num_lambda
+        
+        if strategy == 'identity':
+            q_params = self.rng.uniform(-0.01, 0.01, size=num_remaining_q)
+        else: # uniform
+            q_params = self.rng.uniform(0, 2*np.pi, size=num_remaining_q) 
+        
+        c_params = self.rng.uniform(-limit, limit, size=self.num_c_params)
+        
+        return np.concatenate(scaling_weights + [q_params, c_params])
+    
+def get_hpc_backend(args, seed):
+    """Returns GPU backend only if optimizer is Adam."""
+    if args.optimizer.lower() == 'adam':
+        print(f"{C_GREEN}[HPC-GPU] Initializing NVIDIA GPU Backend (Adjoint)...{C_RESET}")
+        return AerSimulator(
+            method='statevector',
+            device='GPU',
+            cuStateVec_enable=True, # Enable cuQuantum
+            seed_simulator=seed
+        )
+    return AerSimulator(seed_simulator=seed)
 
 class ClassicalMLP(nn.Module):
-    def __init__(self, input_size, window_size, hidden_size, num_layers, output_size = None, seed=42):
+    def __init__(self, input_size, window_size, hidden_size, num_layers, output_size = None, seed=42, horizon=5, num_targets=4):
         super().__init__()
         torch.manual_seed(seed)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.horizon = horizon
+        self.num_targets = num_targets
         flat_input_dim = input_size * window_size
         layers = []
         layers.append(nn.Linear(flat_input_dim, hidden_size))
@@ -494,17 +606,76 @@ class ClassicalMLP(nn.Module):
             layers.append(nn.Tanh())
         layers.append(nn.Linear(hidden_size, output_size))
         self.network = nn.Sequential(*layers).to(self.device)
-    def forward(self, x):
+    def set_weights(self, weights):
+        """Helper to inject flat numpy weights into the PyTorch layers."""
+        weights_tensor = torch.tensor(weights, dtype=torch.float32).to(self.device)
+        ptr = 0
+        for p in self.parameters():
+            numel = p.numel()
+            p.data.copy_(weights_tensor[ptr : ptr + numel].view(p.shape))
+            ptr += numel
+    def forward(self, x, params=None):
+        if params is not None: self.set_weights(params)
+        if isinstance(x, np.ndarray): x = torch.tensor(x, dtype=torch.float32).to(self.device)
         x_flat = x.view(x.size(0), -1)
         out = self.network(x_flat)
-        return out
+        # Reshape to [Batch, Horizon, Targets] to match y_batch shape
+        return out.view(x.size(0), self.horizon, self.num_targets)
+class ClassicalMultiHeadMLP(nn.Module):
+    def __init__(self, heads_config, features, window_size, horizon, seed=42):
+        super().__init__()
+        torch.manual_seed(seed)
+        self.device = torch.device("cuda") if torch.cuda.is_available() else "cpu"
+        self.heads = nn.ModuleList()
+        self.input_indices = []
+        self.horizon = horizon
 
+        for h_cfg in heads_config:
+            # Map head features to indices based on global feature list
+            head_feat_names = map_names(h_cfg.get('features', []))
+            indices = [features.index(f) for f in head_feat_names]
+            self.input_indices.append(indices)
+            
+            # Architecture: Input (Window * Head Features) -> Output (Horizon * Head Targets)
+            in_dim = len(head_feat_names) * window_size
+            out_dim = horizon * h_cfg.get('output_dim', 1)
+            hidden_size = h_cfg.get('hidden_size', 4)
+            
+            head_net = nn.Sequential(
+                nn.Linear(in_dim, hidden_size),
+                nn.Tanh(),
+                nn.Linear(hidden_size, out_dim)
+            )
+            self.heads.append(head_net.to(self.device))
+
+    def set_weights(self, weights):
+        """Helper to inject flat numpy weights into all heads."""
+        weights_tensor = torch.tensor(weights, dtype=torch.float32).to(self.device)
+        ptr = 0
+        for p in self.parameters():
+            numel = p.numel()
+            p.data.copy_(weights_tensor[ptr : ptr + numel].view(p.shape))
+            ptr += numel
+
+    def forward(self, x, params=None):
+        if params is not None: self.set_weights(params)
+        if isinstance(x, np.ndarray): x = torch.tensor(x, dtype=torch.float32).to(self.device)
+
+        head_outputs = []
+        for i, head in enumerate(self.heads):
+            # Slice input for this head
+            x_head = x[:, :, self.input_indices[i]].reshape(x.size(0), -1)
+            c_out = head(x_head)
+            # Reshape head output to [Batch, Horizon, Targets_per_head]
+            head_outputs.append(c_out.view(x.size(0), self.horizon, -1))
+            
+        return torch.cat(head_outputs, dim=2)
 class ClassicalWrapper:
     def __init__(self, torch_model, device,output_shape = None):
         self.model = torch_model
         self.device = device
         self.num_targets = output_shape[2] if output_shape else 4
-    def initialize_parameters(self, method='uniform', optimizer_name='spsa'):
+    def initialize_parameters(self, method='uniform', optimizer_name='spsa', trainable_encoding=False, num_features=0):
         total_params = sum(p.numel() for p in self.model.parameters())
         fan_in = list(self.model.parameters())[0].shape[1] 
         fan_out = list(self.model.parameters())[-1].shape[0]
@@ -554,17 +725,6 @@ class MultiHeadQNN:
         print(f"\n[MultiHead] Initialized with {len(self.models)} heads.")
         for i, (n_p, grp) in enumerate(zip(self.param_splits, self.input_groups)):
             print(f"  > Head {i+1}: {n_p} params | Input Indices: {grp}")
-    def get_quantum_features(self, x, params_flat):
-        """Concatenates quantum features from all heads."""
-        all_phi = []
-        param_start = 0
-        for i, (model, input_idx) in enumerate(zip(self.models, self.input_groups)):
-            n_params = model.total_params
-            p_head = params_flat[param_start : param_start + n_params]
-            x_head = x[:, :, input_idx]
-            all_phi.append(model.get_quantum_features(x_head, p_head))
-            param_start += n_params
-        return np.concatenate(all_phi, axis=1)
     def forward(self, x, params):
         outputs = []
         param_start = 0
@@ -575,8 +735,124 @@ class MultiHeadQNN:
             outputs.append(model.forward(x_head, p_head))
         return np.concatenate(outputs, axis=2)
 
-    def initialize_parameters(self, strategy, optimizer_name='spsa'):
-        params_list = [m.initialize_parameters(strategy, optimizer_name) for m in self.models]
+    def initialize_parameters(self, strategy, optimizer_name='spsa', trainable_encoding=False, num_features=0):
+        """
+        Initializes parameters for all heads. 
+        Note: We ignore the passed 'num_features' and use the specific count for each head.
+        """
+        params_list = []
+        for i, model in enumerate(self.models):
+            # Calculate how many features THIS specific head uses
+            head_feat_count = len(self.input_groups[i])
+            
+            # Call the head's initialization with its specific feature count
+            p_head = model.initialize_parameters(
+                strategy, 
+                optimizer_name=optimizer_name, 
+                trainable_encoding=trainable_encoding, 
+                num_features=head_feat_count
+            )
+            params_list.append(p_head)
+            
+        return np.concatenate(params_list)
+class TorchMultiHeadQNN(nn.Module):
+    def __init__(self, quantum_heads, input_indices, head_output_dims, horizon, seed = 42, device='cuda'):
+        """
+        Unified PyTorch Module for Multi-Head QNNs with GPU support.
+        """
+        super().__init__()
+        self.heads = nn.ModuleList(quantum_heads)  # List of TorchConnector objects
+        self.input_indices = input_indices
+        self.horizon = horizon
+        self.device = torch.device(device)
+        self.rng = np.random.default_rng(seed)
+        
+        # We create a specific classical readout layer for each head
+        self.readouts = nn.ModuleList()
+        for i, q_head in enumerate(self.heads):
+            in_dim = q_head.neural_network.circuit.num_qubits
+            out_dim = horizon * head_output_dims[i]
+            self.readouts.append(nn.Linear(in_dim, out_dim).to(device))
+        self.total_params = sum(h.neural_network.num_weights for h in self.heads) + \
+                            sum(p.numel() for p in self.readouts.parameters())
+
+    def forward(self, x, params=None):
+        if params is not None and isinstance(params, dict):
+            self.load_state_dict(params)
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32).to(self.device)
+            
+        head_outputs = []
+        for head, readout, idxs in zip(self.heads, self.readouts, self.input_indices):
+            # 1. Slice input for this head
+            x_head = x[:, :, idxs]
+            # 2. Flatten for Qiskit: (Batch, Window, Feats) -> (Batch, Window*Feats)
+            x_flat = x_head.reshape(x_head.size(0), -1)
+            # 3. Quantum Pass
+            q_out = head(x_flat)
+            # 4. Classical Readout
+            c_out = readout(q_out)
+            # 5. Reshape to (Batch, Horizon, Targets_for_this_head)
+            head_outputs.append(c_out.view(x.size(0), self.horizon, -1))
+        
+        return torch.cat(head_outputs, dim=2)
+    def set_weights(self, weights):
+        """Explicitly slices the flat vector and applies to each head/readout pair."""
+        ptr = 0
+        with torch.no_grad():
+            for head, readout in zip(self.heads, self.readouts):
+                # A. Set Quantum weights (Lambda + Omega)
+                n_q = head.neural_network.num_weights
+                q_w = torch.from_numpy(weights[ptr : ptr + n_q]).float().to(self.device)
+                head.weight.copy_(q_w)
+                ptr += n_q
+                
+                # B. Set Readout Weights (W)
+                n_w = readout.weight.numel()
+                W_w = torch.from_numpy(weights[ptr : ptr + n_w]).float().to(self.device)
+                readout.weight.copy_(W_w.view(readout.weight.shape))
+                ptr += n_w
+                
+                # C. Set Readout Bias (b)
+                n_b = readout.bias.numel()
+                b_w = torch.from_numpy(weights[ptr : ptr + n_b]).float().to(self.device)
+                readout.bias.copy_(b_w)
+                ptr += n_b
+
+    def initialize_parameters(self, strategy, optimizer_name='adam', trainable_encoding=False, num_features=0):
+        """Generates initial weights using the same logic as the SPSA/Ridge models."""
+        params_list = []
+        is_qrc = str(optimizer_name).lower() == 'ridge'
+
+        for i, (head, readout) in enumerate(zip(self.heads, self.readouts)):
+            head_feat_count = len(self.input_indices[i])
+            
+            # 1. Scaling Factors (λ)
+            scaling = []
+            if trainable_encoding:
+                if is_qrc:
+                    scaling = [self.rng.uniform(0.1, 2.0, size=head_feat_count)]
+                else:
+                    scaling = [np.ones(head_feat_count)]
+            
+            # 2. Ansatz Weights (ω)
+            num_q = head.neural_network.num_weights - (head_feat_count if trainable_encoding else 0)
+            if strategy == 'identity':
+                # Small noise near zero/identity
+                q_p = self.rng.uniform(-0.01, 0.01, size=num_q)
+            else:
+                # Full expressivity
+                q_p = self.rng.uniform(0, 2*np.pi, size=num_q)
+            
+            # 3. Readout Weights (W + b)
+            # Use Xavier/Glorot initialization limit
+            in_dim = head.neural_network.circuit.num_qubits
+            out_dim = readout.out_features
+            limit = np.sqrt(6 / (in_dim + out_dim))
+            c_p = self.rng.uniform(-limit, limit, size=readout.weight.numel() + readout.bias.numel())
+            
+            params_list.append(np.concatenate(scaling + [q_p, c_p]))
+            
         return np.concatenate(params_list)
 def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
     num_targets = target.shape[-1]
@@ -605,9 +881,9 @@ def _compute_loss(args, pred, target, reconstruct, weights, scaler=None):
         return np.mean(weighted_diff)
 
 def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
-    # Force reset here to ensure SPSA perturbations are identical for the same seed
-
-    # ... rest of the training logic
+    np.random.seed(args.run) 
+    random.seed(args.run)
+    qiskit_algorithms.utils.algorithm_globals.random_seed = args.run
     best_val_loss = float('inf')
     best_params = None
     
@@ -698,8 +974,12 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         print(f"  > Mode: Mini-Batch (Size: {batch_size})")
     else:
         print(f"  > Mode: Full-Batch (Size: {num_train_samples})")
-    qiskit_algorithms.utils.algorithm_globals.random_seed = args.run
-    initial_weights = model.initialize_parameters(args.initialization, optimizer_name=args.optimizer)
+    initial_weights = model.initialize_parameters(
+        args.initialization, 
+        optimizer_name=args.optimizer,
+        trainable_encoding=getattr(args, 'trainable_encoding', False),
+        num_features=len(args.features)
+    )
 
     if args.optimizer.upper() == 'COBYLA':
         opt = COBYLA(maxiter=args.maxiter, tol = args.tolerance, rhobeg = 0.1)
@@ -717,59 +997,100 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         "train_history": train_history, "val_history": val_history,         
     }
 
-def train_qrc_ridge(args, model, x_train, y_train, x_val, y_val, alpha=1.0):
-    print(f"\n{C_BLUE}[QRC-Ridge] Solving linear readout...{C_RESET}")
-    rng = np.random.default_rng(args.run)
-    model.rng = rng
-    # 1. Initialize random quantum parameters (the reservoir)
-    init_params = model.initialize_parameters(strategy="uniform", optimizer_name=args.optimizer)
-    if hasattr(model, 'models'): # Multi-Head Logic
-        best_params_list = []
-        p_start, t_start = 0, 0
-        
-        for i, m in enumerate(model.models):
-            # A. Extract Head Parts
-            p_head_init = init_params[p_start : p_start + m.total_params]
-            q_head = p_head_init[:m.num_q_params]
-            x_train_h = x_train[:, :, model.input_groups[i]]
-            
-            # B. Get Quantum Features for this head
-            phi_train = m.get_quantum_features(x_train_h, p_head_init)
-            
-            # C. Extract Targets for this head (N, Horizon * Targets_per_head)
-            y_train_h = y_train[:, :, t_start : t_start + m.columns].reshape(y_train.shape[0], -1)
-            
-            # D. Fit Ridge
-            ridge = Ridge(alpha=alpha, random_state = args.run, solver ='cholesky')
-            ridge.fit(phi_train, y_train_h)
-            c_head = np.concatenate([ridge.coef_.T.flatten(), ridge.intercept_.flatten()])
-            
-            # E. Store solved head weights
-            best_params_list.append(np.concatenate([q_head, c_head]))
-            p_start += m.total_params
-            t_start += m.columns
-            
-        best_weights = np.concatenate(best_params_list)
 
-    else: # Vanilla logic
-        q_params = init_params[:model.num_q_params]
-        phi_train = model.get_quantum_features(x_train, init_params)
-        y_train_flat = y_train.reshape(y_train.shape[0], -1)
-        
-        ridge = Ridge(alpha=alpha,random_state = args.run, solver ='cholesky')
-        ridge.fit(phi_train, y_train_flat)
-        c_params = np.concatenate([ridge.coef_.T.flatten(), ridge.intercept_.flatten()])
-        best_weights = np.concatenate([q_params, c_params])
+def train_qnn_adam_gpu(args, model, x_train, y_train, x_val, y_val, y_scaler=None):
+    """
+    HPC-optimized training loop using PyTorch Adam and GPU acceleration.
+    """
+    # 1. Hardware Setup
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"\n{C_BLUE}[HPC-GPU] Training on: {device}{C_RESET}")
+    model.to(device)
 
-    # Calculate validation MSE for the logger
-    val_preds = model.forward(x_val, best_weights)
-    val_mse = _compute_loss(args, val_preds, y_val, args.reconstruct_val, args.weights, None)
+    # 2. Data Preparation (Tensors and Loaders)
+    # Increase batch_size for GPU efficiency if needed
+    batch_size = getattr(args, 'batch_size', 256) 
     
-    return {
-        "best_weights": best_weights, "final_weights": best_weights,
-        "train_history": [0.0], "val_history": [val_mse]
-    }
+    t_x_train = torch.tensor(x_train, dtype=torch.float32)
+    t_y_train = torch.tensor(y_train, dtype=torch.float32)
+    t_x_val = torch.tensor(x_val, dtype=torch.float32)
+    t_y_val = torch.tensor(y_val, dtype=torch.float32)
 
+    train_loader = DataLoader(TensorDataset(t_x_train, t_y_train), batch_size=batch_size, shuffle=True, pin_memory=True)
+    
+    # 3. Optimizer and Loss
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+    use_scheduler = getattr(args, 'use_scheduler', False)
+    if use_scheduler:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
+        print(f"{C_BLUE}[HPC-GPU] Dynamic LR Scheduler: Enabled (Patience 3, Factor 0.5){C_RESET}")
+    criterion = nn.MSELoss()
+
+    best_val_loss = float('inf')
+    best_weights = None
+    train_history, val_history = [], []
+    
+    start_time = time.time()
+    val_interval = 10
+    # 4. Training Loop
+    for epoch in range(args.maxiter):
+        model.train()
+        epoch_train_loss = 0
+        
+        for batch_idx, (x_batch, y_batch) in enumerate(train_loader):
+            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+            optimizer.zero_grad()
+            
+            # Forward pass (Quantum + Classical on GPU)
+            preds = model(x_batch)
+            loss = criterion(preds, y_batch)
+            
+            # Backward pass (Exact Adjoint Gradients)
+            loss.backward()
+            optimizer.step()
+            
+            epoch_train_loss += loss.item()
+            if (batch_idx + 1) % 10 == 0:
+                print(f"    [Batch {batch_idx+1}/{len(train_loader)}] Loss: {loss.item():.6f}")
+            
+        avg_train_loss = epoch_train_loss / len(train_loader)
+        train_history.append(avg_train_loss)
+        is_first = (epoch == 0)
+        is_last = (epoch + 1 == args.maxiter)
+        is_interval = ((epoch + 1) % val_interval == 0)
+        if is_first or is_last or is_interval:
+            model.eval()
+            with torch.no_grad():
+                v_x, v_y = t_x_val.to(device), t_y_val.to(device)
+                val_preds = model(v_x)
+                val_mse = _compute_loss(
+                    args, val_preds.cpu().numpy(), y_val, 
+                    args.reconstruct_val, args.weights, y_scaler
+                )
+            if val_mse < best_val_loss:
+                best_val_loss = val_mse
+                best_weights = deepcopy(model.state_dict())
+            val_history.append(val_mse)
+            print(f"  > [Validation] Epoch {epoch+1} | Val MSE: {val_mse:.6f}")
+            if scheduler:
+                scheduler.step(val_mse)
+                current_lr = optimizer.param_groups[0]['lr']
+                if current_lr < args.learning_rate:
+                    print(f"    [Scheduler] Reducing LR to {current_lr:.6f}")
+        else:
+            val_history.append(val_history[-1] if val_history else avg_train_loss)
+        
+        print(f"  > Epoch {epoch+1:4d}/{args.maxiter} | Avg Train MSE: {avg_train_loss:.6f}")
+    print(f"\n[HPC-GPU] Completed in {(time.time() - start_time) / 60:.2f} min.")
+    
+    # 7. Finalize and Return
+    # We return the state_dict for best/final so the script can save them as pkl
+    return {
+        "best_weights": best_weights, 
+        "final_weights": model.state_dict(),
+        "train_history": train_history, 
+        "val_history": val_history
+    }
 def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler = None, device='cpu'):
     """
     Standard PyTorch training loop with Adam optimizer.
@@ -912,7 +1233,11 @@ def recursive_forward_pass(args, model, best_params, x_test, x_scaler, y_scaler)
     
     last_pred_values = np.zeros(num_targets) 
     for i in range(num_samples):
-        preds_full = model.forward(curr_window, best_params)
+        if isinstance(model, nn.Module):
+            with torch.no_grad(): 
+                preds_full = model(curr_window, best_params).cpu().numpy()
+        else:
+            preds_full = model.forward(curr_window, best_params)
         recursive_preds[i] = preds_full[0]
 
         next_gt_idx = min(i + 1, num_samples - 1)
@@ -950,7 +1275,13 @@ def evaluate_model(args, model, params, x_test, y_test, x_scaler, y_scaler):
     orig_shape = y_test.shape # (N, H, T)
     num_targets = orig_shape[-1] 
     target_names = args.targets
-    preds_norm_step = model.forward(x_test, params) 
+
+    if isinstance(model, nn.Module):
+        model.eval()
+        with torch.no_grad():
+            preds_norm_step = model(x_test, params).cpu().numpy()
+    else:
+        preds_norm_step = model.forward(x_test, params)
     
     if y_scaler:
         preds_real_step = y_scaler.inverse_transform(preds_norm_step.reshape(-1, num_targets)).reshape(orig_shape)
@@ -1178,7 +1509,18 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     except ValueError: dt_object = timestamp 
 
     raw_data = {}
-    ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot',  'heads_config', 'initialization', 'ansatz', 'entangle', 'reps', 'encoding', 'map', 'features']
+    explicit_keys = [
+        'run', 'features', 'targets','window_size', 'horizon', 'predict', 'reconstruct_train','reconstruct_val', 'head_config', 'head_number','encoding','ansatz','entangle','reps','map','optimizer', 
+        'maxiter', 'learning_rate', 'batch_size', 'initialization','perturbation',
+        'trainable_encoding', 'freeze_qnn', 'use_hadamard'
+    ]
+    for key in explicit_keys:
+        if hasattr(args, key):
+            val = getattr(args, key)
+            raw_data[key] = str(val).lower() if isinstance(val, bool) else val
+
+    # Ensure 'freeze' is explicitly captured from the argument passed to the function
+    ignore_keys = ['select_features', 'drop_features', 'save_plot', 'show_plot', 'ansatz', 'entangle', 'reps', 'encoding', 'map', 'features']
     
     def clean_val(v):
         if isinstance(v, bool): return str(v).lower()
@@ -1199,7 +1541,10 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     raw_data['heads_config'] = heads_config_str
     raw_data['weights'] = getattr(args, 'weights',"[1.0, 1.0, 1.0, 1.0]")
     raw_data['initialization'] = getattr(args, 'initialization', 'N/A')
+    raw_data['perturbation'] = getattr(args, 'perturbation', 'N/A')
     val_keys_map = {
+        'Step_MSE': 'Val Step MSE',
+        'Step_R2': 'Val Step R2',
         'Global_open_MSE': 'Val Global Open MSE',
         'Global_open_R2': 'Val Global Open R2',
         'Global_closed_R2': 'Val Global Closed R2'
@@ -1224,25 +1569,31 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     raw_data.update(metric_map)
     target_names = ["Surge Velocity", "Sway Velocity", "Yaw Rate", "Yaw Angle"]
     metric_suffixes = ["Step MSE", "Step R2", "Local MSE",
-                       "Global open MSE", "Global open R2",
-                       "Global closed MSE", "Global closed R2"]
+                       "Global open MSE", "Global open R2"]
 
     for tgt_space in target_names:
         tgt_under = tgt_space.replace(" ", "_")
         for m_suffix in metric_suffixes:
             m_under = m_suffix.replace(" ", "_")
-            key_in_metrics = f"{tgt_under}_{m_under}"
+            
+            # Check for standard name AND delta-prefixed name
+            key_standard = f"{tgt_under}_{m_under}"
+            key_delta = f"delta_{tgt_under}_{m_under}"
+            
             col_name_excel = f"{tgt_space} {m_suffix}"
-            if key_in_metrics in m_test:
-                raw_data[col_name_excel] = m_test[key_in_metrics]
+            
+            if key_standard in m_test:
+                raw_data[col_name_excel] = m_test[key_standard]
+            elif key_delta in m_test:
+                raw_data[col_name_excel] = m_test[key_delta]
     final_column_order = [
         "date", "model_id", "run", "weight_selection","data", "data_n", "data_dt", 
         "features", "targets", "window_size", "horizon", "predict", "norm", 
-        "reconstruct_train", "reconstruct_val", "model", "heads_config",  "head_number","encoding", "ansatz", 
+        "reconstruct_train", "reconstruct_val", "model", "heads_config",  "head_number","encoding", "ansatz", "freeze_qnn", "use_hadamard", "trainable_encoding",
         "entangle", "reps", "map", "reorder", 
         "optimizer", "maxiter","iterations",  "tolerance", "batch_size", "learning_rate", "perturbation", "weights",
         "total params", "q params", "c params","final val loss", 
-        "Val Global Open MSE", "Val Global Open R2", "Val Global Closed R2",
+        "Val Step MSE", "Val Step R2", "Val Global Open MSE", "Val Global Open R2", "Val Global Closed R2",
         "step MSE", "step R2", 
         "local MSE", "global open MSE", "global open R2", "global closed MSE", "global closed R2", 
         "recursivity", "initialization",
@@ -1319,6 +1670,7 @@ def save_experiment_results(args, train_results, val_eval, test_eval, scalers, q
     print(f"\n[Logger] Model saved to {model_filename}")
     print(f"[Logger] Stats appended to {excel_filename}")
     return model_filename
+
 def find_existing_experiment(current_args, models_root="models"):
     print(f"{C_BLUE}[Cache Search] Scanning {models_root} (including all subfolders)...{C_RESET}")
     all_pkls = glob.glob(os.path.join(models_root, "**", "*.pkl"), recursive=True)
@@ -1421,7 +1773,18 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
             if val.upper() in ['TRUE', 'VERDADERO']: return 'true'
             if val.upper() in ['FALSE', 'FALSO']: return 'false'
         return val
-    
+    # Inside save_classical_results, before creating raw_data
+    heads_config_str = "N/A"
+    if getattr(args, 'model', '') == 'multihead' and hasattr(args, 'heads_config'):
+        # Just like the quantum version, clean the list for Excel readability
+        clean_heads = []
+        for h in args.heads_config:
+            clean_heads.append({
+                'features': h.get('features'),
+                'hidden': h.get('hidden_size', args.hidden_size)
+            })
+        heads_config_str = str(clean_heads)
+        
     raw_data = {}
     for key, value in vars(args).items():
         if key not in ignore_keys:
@@ -1430,7 +1793,9 @@ def save_classical_results(args, train_results, val_eval, test_eval, scalers, ti
                 raw_data[key] = clean_val(short_list)
             else:
                 raw_data[key] = clean_val(value)
-
+    # Add 'heads_config' and 'head_number' to the raw_data dictionary
+    raw_data['heads_config'] = heads_config_str
+    raw_data['head_number'] = len(args.heads_config) if getattr(args, 'model','') == 'multihead' else 1
     metrics_flat = {
         "date": dt_object,
         "model_id": os.path.basename(model_filename),

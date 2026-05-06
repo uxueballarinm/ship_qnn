@@ -3,104 +3,98 @@ import glob
 import os
 
 def smart_merge_backups_final():
-    # --- 1. PATH DEFINITIONS ---
-    path_1_heads = r"logs/feature_importance_analysis/yaw_rate/experiments_summary.xlsx"
-    path_2_heads = r"logs/feature_importance_analysis/yaw_rate/experiments_summary.xlsx"
-    path_3_heads = r"logs/feature_importance_analysis/yaw_rate/experiments_summary.xlsx"
-    path_4_heads = r"logs/feature_importance_analysis/yaw_rate/experiments_summary.xlsx"
-    # --- 2. SEARCH LOGIC ---
-    # Use recursive search to find ALL backups in any subfolder of 'logs'
-    backup_files = glob.glob("logs/feature_importance_analysis/yaw_rate/backups/*.csv", recursive=True)
-    # Alternatively, if they aren't in folders named 'backups', use:
-    # backup_files = glob.glob("logs/**/*.csv", recursive=True)
+    # --- 1. SETTINGS ---
+    # We search ONLY in your specific subfolder to avoid touching other head counts
+    search_dir = r"logs/experiments_systematic/qrc/ansatz_study/3heads/3heads"
+    target_path = r"logs/experiments_systematic/qrc/ansatz_study/3heads/exp2.xlsx"
+    
+    # --- 2. FIND ALL FILES (.csv and .xlsx) ---
+    # This pattern finds both types at once
+    files = glob.glob(os.path.join(search_dir, "**/*.[xc][ls][sv]*"), recursive=True)
+    
+    # Filter out the target file itself if it happens to be in the search path
+    backup_files = [f for f in files if os.path.abspath(f) != os.path.abspath(target_path)]
 
     if not backup_files:
-        print(f"No CSV backup files found in the 'logs/' directory tree.")
+        print(f"No files found in: {search_dir}")
         return
 
-    print(f"Found {len(backup_files)} file(s). Processing in memory...")
+    print(f"Found {len(backup_files)} potential backup files.")
 
-    list_1_heads = []
-    list_2_heads = []
-    list_3_heads = []
-    list_4_heads = []
-
+    merged_list = []
     files_processed = []
 
-    # --- 3. Create the parent directories if they are missing ---
-    for p in [path_1_heads, path_2_heads, path_3_heads, path_4_heads]:
-        folder = os.path.dirname(p)
-        if folder and not os.path.exists(folder):
-            print(f"Creating missing directory: {folder}")
-            os.makedirs(folder, exist_ok=True)
-
-    # --- 4. Process CSVs ---
-    for csv_file in backup_files:
+    # --- 3. PROCESS ---
+    for f in backup_files:
         try:
-            df = pd.read_csv(csv_file)
-            if df.empty: continue
-            
-            # Check for head count column
-            col = 'head_number' if 'head_number' in df.columns else 'num_heads'
-            if col in df.columns:
-                num_heads = df[col].iloc[0]
-                
-                # Date cleaning
-                date_col = next((c for c in df.columns if c.lower() == 'date'), None)
-                if date_col:
-                    df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.strftime('%d/%m/%Y %H:%M:%S')
-
-                # Sort into correct list
-                if num_heads == 1:
-                    list_1_heads.append(df)
-                elif num_heads == 2:
-                    list_2_heads.append(df)
-                elif num_heads == 3:
-                    list_3_heads.append(df)
-                elif num_heads == 4:
-                    list_4_heads.append(df)
-                
-                files_processed.append(csv_file)
-        except Exception as e:
-            print(f"Error reading {csv_file}: {e}")
-
-    # --- 5. Final Merge and Save ---
-    # Logic remains identical, handles all 3 lists
-    merge_tasks = [
-        (list_1_heads, path_1_heads, "1-HEADS"),
-        (list_2_heads, path_2_heads, "2-HEADS"),
-        (list_3_heads, path_3_heads, "3-HEADS"),
-        (list_4_heads, path_4_heads, "4-HEADS")
-    ]
-
-    for current_list, target_path, label in merge_tasks:
-        if current_list:
-            print(f"\nFinalizing {label} merge...")
-            df_new_data = pd.concat(current_list, ignore_index=True)
-            
-            if os.path.exists(target_path):
-                try:
-                    df_existing = pd.read_excel(target_path)
-                    df_final = pd.concat([df_existing, df_new_data], ignore_index=True)
-                except Exception as e:
-                    print(f"Could not read existing Excel {target_path}, creating new. Error: {e}")
-                    df_final = df_new_data
+            # Determine format by extension
+            if f.lower().endswith('.csv'):
+                df = pd.read_csv(f)
             else:
-                df_final = df_new_data
-                
-            try:
-                df_final.to_excel(target_path, index=False)
-                print(f"SUCCESS: {target_path} updated.")
-            except PermissionError:
-                print(f"CRITICAL ERROR: Please close '{target_path}' and run again!")
+                df = pd.read_excel(f, engine='openpyxl')
 
-    # --- 6. Cleanup ---
-    if files_processed:
-        choice = input(f"\nSuccessfully processed {len(files_processed)} files. Delete CSVs? (y/n): ")
-        if choice.lower() == 'y':
-            for f in files_processed:
-                os.remove(f)
-            print("CSV files deleted.")
+            if df.empty:
+                continue
+
+            # Identify the head count column
+            col = 'head_number' if 'head_number' in df.columns else 'num_heads'
+            
+            if col in df.columns:
+                # FORCE to integer to prevent "3" vs 3.0 mismatches
+                val = pd.to_numeric(df[col].iloc[0], errors='coerce')
+                
+                if val == 3:
+                    print(f"  -> Adding {len(df)} rows from: {os.path.basename(f)}")
+                    
+                    # Date cleaning
+                    date_col = next((c for c in df.columns if c.lower() == 'date'), None)
+                    if date_col:
+                        df[date_col] = pd.to_datetime(df[date_col], errors='coerce').dt.strftime('%d/%m/%Y %H:%M:%S')
+                    
+                    merged_list.append(df)
+                    files_processed.append(f)
+                else:
+                    print(f"  [Skipped] {os.path.basename(f)} (Head count is {val}, not 3)")
+            else:
+                print(f"  [Skipped] {os.path.basename(f)} (Column '{col}' not found)")
+
+        except Exception as e:
+            print(f"Error reading {f}: {e}")
+
+    # --- 4. SAVE ---
+    if merged_list:
+        new_data = pd.concat(merged_list, ignore_index=True)
+        print(f"\nTotal new rows to merge: {len(new_data)}")
+
+        if os.path.exists(target_path):
+            try:
+                existing_df = pd.read_excel(target_path, engine='openpyxl')
+                final_df = pd.concat([existing_df, new_data], ignore_index=True)
+                print(f"Appending to existing file ({len(existing_df)} rows already present).")
+            except Exception as e:
+                print(f"Could not read existing file, starting fresh. Error: {e}")
+                final_df = new_data
+        else:
+            final_df = new_data
+
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        
+        try:
+            final_df.to_excel(target_path, index=False, engine='openpyxl')
+            print(f"SUCCESS: {target_path} saved with {len(final_df)} total rows.")
+        except PermissionError:
+            print(f"CRITICAL: Close '{target_path}' and run again!")
+
+        # --- 5. CLEANUP ---
+        if files_processed:
+            choice = input(f"\nDelete {len(files_processed)} processed backup files? (y/n): ")
+            if choice.lower() == 'y':
+                for f in files_processed:
+                    os.remove(f)
+                print("Files deleted.")
+    else:
+        print("\nNo data matched the 'head_number == 3' criteria. Nothing saved.")
 
 if __name__ == "__main__":
     smart_merge_backups_final()

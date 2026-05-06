@@ -266,6 +266,7 @@ if __name__=="__main__":
     parser.add_argument('--encoding', type=str, default='compact', choices=['compact', 'serial', 'parallel'], help="Strategy for multi-feature encoding")
     parser.add_argument('--entangle', type=str, default='reverse_linear', choices=['full', 'linear', 'reverse_linear', 'circular', 'sca']) # reverse_linear
     parser.add_argument('--ansatz', type=str, default='ugates', choices=['ugates', 'efficientsu2', 'realamplitudes']) # ugates
+    parser.add_argument('--trainable_encoding', type=str2bool, default=False)
     parser.add_argument('--reps', type=int, default=3) # 1,3,5,7
     parser.add_argument('-init', '--initialization', type=str, default='uniform', choices=['uniform', 'identity'])# uniform
     parser.add_argument('--model', type=str, default='vanilla', choices=['vanilla', 'multihead']) # vanilla
