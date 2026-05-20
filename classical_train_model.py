@@ -9,7 +9,7 @@ from copy import deepcopy
 from torch.utils.data import TensorDataset, DataLoader
 
 # Import everything from your central utilities
-from qnn_utils import *
+from qnn_utils_adam import *
 
 def train_classical(args):
     timestamp = datetime.datetime.now().strftime("%m-%d_%H-%M-%S")

@@ -2,12 +2,29 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from scipy.stats import spearmanr
+from scipy import stats
 import ast
 import os
-from adjustText import adjust_text # Preserving your specific import
+from adjustText import adjust_text
 import plotly.express as px
 import plotly.graph_objects as go
+
+# --- ADVANCED STATS HELPERS ---
+def calculate_ccc(x, y):
+    if len(x) < 2: return np.nan
+    cor = np.corrcoef(x, y)[0, 1]
+    mean_x, mean_y = np.mean(x), np.mean(y)
+    var_x, var_y = np.var(x), np.var(y)
+    sd_x, sd_y = np.std(x), np.std(y)
+    denom = var_x + var_y + (mean_x - mean_y)**2
+    return (2 * cor * sd_x * sd_y) / denom if denom != 0 else 0
+
+def pearson_no_outliers(x, y, threshold=3):
+    df = pd.DataFrame({'x': x, 'y': y}).dropna()
+    if len(df) < 5: return np.nan
+    z_scores = np.abs(stats.zscore(df.astype(float)))
+    filtered = df[(z_scores < threshold).all(axis=1)]
+    return stats.pearsonr(filtered['x'], filtered['y'])[0] if len(filtered) > 3 else np.nan
 
 def parse_config(config_str):
     if pd.isna(config_str): return []
@@ -28,128 +45,166 @@ def format_heads_vertical(config_list):
         lines.append(f"  Map: {h_map}")
     return "<br>".join(lines)
 
-def run_full_analysis():
-    file_path = r'logs\QRC_VS_SPSA.xlsx'
-    output_dir = 'correlation_results'
-    os.makedirs(output_dir, exist_ok=True)
-    
-    if not os.path.exists(file_path):
-        print(f"ERROR: File not found at {file_path}"); return
-
-    # 1. Data Loading & Matching
-    print(f"Reading data...")
-    df = pd.read_excel(file_path, sheet_name='Hoja1')
-    df.columns = [str(c).strip() for c in df.columns]
-    param_col = 'total params'
-
-    spsa_df = df[df['optimizer'].str.lower() == 'spsa'].copy()
-    ridge_df = df[df['optimizer'].str.lower() == 'ridge'].copy()
-    match_cols = ['heads_config', 'window_size', 'horizon', 'predict']
-    
-    merged = pd.merge(
-        spsa_df[match_cols + ['global open MSE_Mean', 'global open R2_Mean', param_col]],
-        ridge_df[match_cols + ['global open MSE_Mean', 'global open R2_Mean']],
-        on=match_cols, suffixes=('_spsa', '_qrc')
-    ).reset_index(drop=True)
-    
-    merged['mapping_id'] = merged.index
-    merged['parsed_heads'] = merged['heads_config'].apply(parse_config)
-    merged['vertical_config'] = merged['parsed_heads'].apply(format_heads_vertical)
-
-    # --- CALCULATIONS ---
-    # R2 Difference (Efficiency Metric)
-    merged['r2_diff'] = merged['global open R2_Mean_spsa'] - merged['global open R2_Mean_qrc']
-    
-    # R2: 10% Outlier Logic
-    merged['is_r2_outlier'] = np.abs(merged['r2_diff']) > 0.1
-    
-    # MSE: 10% Outlier Logic
-    max_mse_observed = max(merged['global open MSE_Mean_spsa'].max(), merged['global open MSE_Mean_qrc'].max())
-    mse_threshold = 0.1 * max_mse_observed
-    merged['mse_diff'] = merged['global open MSE_Mean_spsa'] - merged['global open MSE_Mean_qrc']
-    merged['is_mse_outlier'] = np.abs(merged['mse_diff']) > mse_threshold
-
-    # Regression lines for static plots
-    m1, b1 = np.polyfit(merged['global open R2_Mean_qrc'], merged['global open R2_Mean_spsa'], 1)
-    m2, b2 = np.polyfit(merged['global open MSE_Mean_qrc'], merged['global open MSE_Mean_spsa'], 1)
-
-    # 2. Static Heatmap (Preserved)
-    plt.figure(figsize=(9, 7))
-    corr_cols = ['global open R2_Mean_spsa', 'global open R2_Mean_qrc', 'global open MSE_Mean_spsa', 'global open MSE_Mean_qrc']
-    sns.heatmap(merged[corr_cols].corr(method='spearman'), annot=True, cmap='RdYlGn', fmt='.3f')
-    plt.savefig(os.path.join(output_dir, 'correlation_heatmap.png'))
-    plt.close()
-
-    # 3. STATIC LOCAL PLOTS (Now 3 Subplots)
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(32, 10))
-    
-    # --- R2 Subplot ---
-    x1, y1 = merged['global open R2_Mean_qrc'], merged['global open R2_Mean_spsa']
-    ax1.scatter(x1, y1, c=['red' if o else 'royalblue' for o in merged['is_r2_outlier']], alpha=0.5, s=100)
-    ax1.plot([min(x1.min(), y1.min()), max(x1.max(), y1.max())], [min(x1.min(), y1.min()), max(x1.max(), y1.max())], 'k--', label='Ideal (y=x)')
-    ax1.plot(x1, m1*x1 + b1, color='firebrick', alpha=0.3, label='Actual Trend')
-    texts1 = [ax1.text(x1[i], y1[i], f"#{i}", fontsize=8) for i in range(len(merged))]
-    adjust_text(texts1, ax=ax1, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
-    ax1.set_title("R2 Consistency (Ideal Line y=x)"); ax1.legend()
-
-    # --- MSE Subplot ---
-    x2, y2 = merged['global open MSE_Mean_qrc'], merged['global open MSE_Mean_spsa']
-    ax2.scatter(x2, y2, c=['orange' if o else 'seagreen' for o in merged['is_mse_outlier']], alpha=0.5, s=100)
-    ax2.plot([0, max_mse_observed], [0, max_mse_observed], 'k--', label='Ideal (y=x)')
-    ax2.plot(x2, m2*x2 + b2, color='firebrick', alpha=0.3, label='Actual Trend')
-    texts2 = [ax2.text(x2[i], y2[i], f"#{i}", fontsize=8) for i in range(len(merged))]
-    adjust_text(texts2, ax=ax2, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
-    ax2.set_title(f"MSE Consistency (Threshold: {mse_threshold:.2f})"); ax2.legend()
-
-    # --- NEW: Efficiency Frontier Subplot ---
-    # Colors: Green where Ridge wins (Negative Diff), Red where SPSA wins (Positive Diff)
-    eff_colors = ['#2ecc71' if d < 0 else '#e74c3c' for d in merged['r2_diff']]
-    ax3.scatter(merged[param_col], merged['r2_diff'], c=eff_colors, s=120, edgecolors='k', alpha=0.7)
-    ax3.axhline(0, color='black', linestyle='-', linewidth=1.5)
-    ax3.set_title("Efficiency Frontier\n(Below 0 = Ridge is Better)")
-    ax3.set_xlabel("Total Parameters (Q + C)"); ax3.set_ylabel("R2 Delta (SPSA - Ridge)")
-    texts3 = [ax3.text(merged[param_col][i], merged['r2_diff'][i], f"#{i}", fontsize=8) for i in range(len(merged))]
-    adjust_text(texts3, ax=ax3, arrowprops=dict(arrowstyle='->', color='gray', lw=0.5))
-
-    for ax in [ax1, ax2, ax3]: ax.margins(0.2); ax.grid(alpha=0.1)
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'ranking_mapping_plots_labeled.png'))
-
-    # 4. INTERACTIVE HTMLs (3 Files)
-    # R2 and MSE Explorers
-    for mode in ['R2', 'MSE']:
-        is_r2 = (mode == 'R2')
-        out_col = 'is_r2_outlier' if is_r2 else 'is_mse_outlier'
-        cx, cy = (x1, y1) if is_r2 else (x2, y2)
-        cm, cb = (m1, b1) if is_r2 else (m2, b2)
+class QNNvsQELMFullSuite:
+    def __init__(self, qnn_file, qelm_file, output_dir='correlation_results'):
+        self.output_dir = output_dir
+        os.makedirs(self.output_dir, exist_ok=True)
         
-        fig_int = px.scatter(
-            merged, x=cx, y=cy, color=out_col, hover_name="mapping_id",
-            hover_data={param_col: True, "predict": True, "vertical_config": True, out_col: False},
-            title=f"Interactive {mode} Anomaly Explorer",
-            color_discrete_map={True: "red" if is_r2 else "orange", False: "royalblue" if is_r2 else "seagreen"}
-        )
-        fig_int.add_trace(go.Scatter(x=[cx.min(), cx.max()], y=[cx.min(), cx.max()], mode='lines', name='Ideal (y=x)', line=dict(color='black', dash='dash')))
-        fig_int.add_trace(go.Scatter(x=[cx.min(), cx.max()], y=[cm*cx.min()+cb, cm*cx.max()+cb], mode='lines', name='Actual Trend', line=dict(color='firebrick', width=1)))
-        fig_int.update_layout(hoverlabel=dict(align="left", bgcolor="white"))
-        fig_int.write_html(os.path.join(output_dir, f'interactive_{mode}_explorer.html'))
+        # EXACT column names from your list
+        self.param_col_name = "total params"
+        self.match_keys = [
+            "features", "targets", "window_size", "horizon", "predict", "norm", 
+            "reconstruct_train", "reconstruct_val", "model", "heads_config", 
+            "head_number", "encoding", "ansatz", "entangle", "reps", "map", 
+            "reorder", self.param_col_name
+        ]
+        self.metrics = ['Val Global Open R2', 'Val Global Open MSE']
+        
+        print("Reading datasets (Memory Optimized)...")
+        cols_to_load = self.match_keys + self.metrics
+        
+        self.df_qnn = pd.read_excel(qnn_file, usecols=lambda c: c in cols_to_load, engine='openpyxl')
+        self.df_qelm = pd.read_excel(qelm_file, usecols=lambda c: c in cols_to_load, engine='openpyxl')
+        self._preprocess()
 
-    # NEW: Efficiency Explorer HTML
-    fig_eff = px.scatter(
-        merged, x=param_col, y="r2_diff", color="r2_diff", 
-        color_continuous_scale="RdYlGn_r", # Visual spectrum from QRC win (Green) to SPSA win (Red)
-        hover_name="mapping_id",
-        hover_data={param_col: True, "predict": True, "vertical_config": True, "r2_diff": ":.4f"},
-        title="Efficiency Frontier Explorer: Impact of Complexity on Optimizer Success",
-        labels={"r2_diff": "R2 Delta (SPSA-Ridge)", param_col: "Total Params"}
-    )
-    fig_eff.add_hline(y=0, line_dash="solid", line_color="black")
-    fig_eff.update_layout(hoverlabel=dict(align="left", bgcolor="white"))
-    fig_eff.write_html(os.path.join(output_dir, 'interactive_efficiency_explorer.html'))
+    def _preprocess(self):
+        for df in [self.df_qnn, self.df_qelm]:
+            df.columns = [str(c).strip() for c in df.columns]
+            for col in self.match_keys:
+                if col in df.columns:
+                    df[col] = df[col].astype(str).str.strip().str.replace(".0", "", regex=False)
 
-    # 5. Final Output
-    merged.to_csv(os.path.join(output_dir, 'spsa_vs_qrc_comprehensive_analysis.csv'), index=False)
-    print(f"\nFinal Success! Created Heatmap, Labeled PNG (3 subplots), and 3 Interactive HTML Explorers.")
+    def _get_aggregates(self, df):
+        aggs = []
+        keys = [k for k in self.match_keys if k in df.columns]
+        for m in self.metrics:
+            if m not in df.columns: continue
+            df[m] = pd.to_numeric(df[m], errors='coerce')
+            is_mse = 'MSE' in m.upper()
+            g = df.groupby(keys)[m].agg([('mean','mean'),('median','median'),('best','min' if is_mse else 'max')]).reset_index()
+            g['metric_source'] = m
+            aggs.append(g)
+        return pd.concat(aggs) if aggs else pd.DataFrame()
+
+    def run_analysis(self):
+        print("1. Aggregating and matching...")
+        qnn_agg = self._get_aggregates(self.df_qnn)
+        qelm_agg = self._get_aggregates(self.df_qelm)
+        
+        common_keys = list(set(qnn_agg.columns) & set(qelm_agg.columns) - {'mean', 'median', 'best'})
+        merged = pd.merge(qnn_agg, qelm_agg, on=common_keys, suffixes=('_qnn', '_qelm')).dropna()
+        
+        if merged.empty:
+            print("ERROR: No matching experiments found."); return
+
+        print("2. Calculating stats and Excel report...")
+        global_results, head_results, reps_results = [], {}, {}
+
+        for metric in merged['metric_source'].unique():
+            subset = merged[merged['metric_source'] == metric]
+            for agg in ['mean', 'median', 'best']:
+                res_g = self._calc_stats_row(subset, metric, agg, "All")
+                if res_g: global_results.append(res_g)
+                
+                for h in subset['head_number'].unique():
+                    h_sub = subset[subset['head_number'] == h]
+                    res_h = self._calc_stats_row(h_sub, metric, agg, h)
+                    if res_h:
+                        if h not in head_results: head_results[h] = []
+                        head_results[h].append(res_h)
+
+                if 'reps' in subset.columns:
+                    for r in subset['reps'].unique():
+                        r_sub = subset[subset['reps'] == r]
+                        res_r = self._calc_stats_row(r_sub, metric, agg, "All", r)
+                        if res_r:
+                            if r not in reps_results: reps_results[r] = []
+                            reps_results[r].append(res_r)
+
+        self._save_excel(global_results, head_results, reps_results)
+
+        print("3. Generating Plots and HTML explorers...")
+        self._generate_plots(merged)
+
+    def _calc_stats_row(self, df, metric, agg, head, reps="All"):
+        x, y = df[f'{agg}_qnn'].values, df[f'{agg}_qelm'].values
+        if len(x) < 3: return None
+        spearman, _ = stats.spearmanr(x, y)
+        pearson, _ = stats.pearsonr(x, y)
+        p_no_out = pearson_no_outliers(x, y)
+        return {
+            'Metric': metric, 'Head': head, 'Reps': reps, 'Aggregation': agg, 'N': len(x),
+            'Spearman_Rho': round(spearman, 4), 'Pearson_With_Outliers': round(pearson, 4),
+            'Pearson_No_Outliers': round(p_no_out, 4) if not np.isnan(p_no_out) else "N/A",
+            'Pearson_Fisher_Z': round(np.arctanh(pearson), 4) if abs(pearson) < 1 else "N/A",
+            'CCC': round(calculate_ccc(x, y), 4)
+        }
+
+    def _generate_plots(self, merged_all):
+        viz_r2 = merged_all[merged_all['metric_source'] == 'Val Global Open R2'].copy()
+        viz_mse = merged_all[merged_all['metric_source'] == 'Val Global Open MSE'].copy()
+        
+        # DYNAMIC detection of the parameter column after merge
+        actual_param_col = self.param_col_name
+        if actual_param_col not in viz_r2.columns:
+            if f"{self.param_col_name}_qnn" in viz_r2.columns: actual_param_col = f"{self.param_col_name}_qnn"
+            elif f"{self.param_col_name}_qelm" in viz_r2.columns: actual_param_col = f"{self.param_col_name}_qelm"
+
+        for df in [viz_r2, viz_mse]:
+            df['parsed_heads'] = df['heads_config'].apply(parse_config)
+            df['vertical_config'] = df['parsed_heads'].apply(format_heads_vertical)
+            df['mapping_id'] = range(len(df))
+            if actual_param_col in df.columns:
+                df[actual_param_col] = pd.to_numeric(df[actual_param_col], errors='coerce')
+
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(32, 10))
+        
+        # Subplot 1: R2
+        x1, y1 = viz_r2['median_qelm'], viz_r2['median_qnn']
+        ax1.scatter(x1, y1, alpha=0.6, s=100, edgecolors='k')
+        ax1.plot([min(x1.min(), y1.min()), max(x1.max(), y1.max())], [min(x1.min(), y1.min()), max(x1.max(), y1.max())], 'k--', label='y=x')
+        ax1.set_title("R2 Consistency (Median)"); ax1.set_xlabel("QELM"); ax1.set_ylabel("QNN")
+
+        # Subplot 2: MSE
+        x2, y2 = viz_mse['median_qelm'], viz_mse['median_qnn']
+        ax2.scatter(x2, y2, alpha=0.6, s=100, color='seagreen', edgecolors='k')
+        ax2.plot([0, max(x2.max(), y2.max())], [0, max(x2.max(), y2.max())], 'k--')
+        ax2.set_title("MSE Consistency (Median)")
+
+        # Subplot 3: Efficiency Frontier
+        viz_r2['r2_diff'] = viz_r2['median_qnn'] - viz_r2['median_qelm']
+        if actual_param_col in viz_r2.columns:
+            sns.scatterplot(data=viz_r2, x=actual_param_col, y='r2_diff', ax=ax3, s=120, hue='r2_diff', palette='RdYlGn')
+            ax3.axhline(0, color='black', linestyle='-')
+            ax3.set_title(f"Efficiency Frontier\n({actual_param_col})")
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.output_dir, 'ranking_mapping_plots_labeled.png'))
+
+        for mode, df_mode in [('R2', viz_r2), ('MSE', viz_mse)]:
+            fig_int = px.scatter(
+                df_mode, x='median_qelm', y='median_qnn', 
+                hover_name="head_number", 
+                hover_data=["predict", "vertical_config"],
+                title=f"Interactive {mode} Anomaly Explorer (QNN vs QELM)"
+            )
+            fig_int.add_trace(go.Scatter(x=[df_mode['median_qelm'].min(), df_mode['median_qelm'].max()], 
+                                         y=[df_mode['median_qelm'].min(), df_mode['median_qelm'].max()], 
+                                         mode='lines', name='y=x', line=dict(color='black', dash='dash')))
+            fig_int.write_html(os.path.join(self.output_dir, f'interactive_{mode}_explorer.html'))
+
+    def _save_excel(self, g, h, r):
+        path = os.path.join(self.output_dir, 'Comprehensive_Correlation_Report.xlsx')
+        with pd.ExcelWriter(path) as writer:
+            pd.DataFrame(g).to_excel(writer, sheet_name='Summary_Global', index=False)
+            for h_id in sorted(h.keys(), key=lambda x: str(x)):
+                pd.DataFrame(h[h_id]).to_excel(writer, sheet_name=f"Head_{h_id}"[:31], index=False)
+            for r_id in sorted(r.keys(), key=lambda x: str(x)):
+                pd.DataFrame(r[r_id]).to_excel(writer, sheet_name=f"Reps_{r_id}"[:31], index=False)
 
 if __name__ == "__main__":
-    run_full_analysis()
+    # Update paths as needed
+    qnn_f = r"logs\curated_studies\study_qnn_spsa.xlsx"
+    qelm_f = r"logs\curated_studies\study_qelm_ridge.xlsx"
+    suite = QNNvsQELMFullSuite(qnn_f, qelm_f)
+    suite.run_analysis()

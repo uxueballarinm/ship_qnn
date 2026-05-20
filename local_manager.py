@@ -104,7 +104,7 @@ def worker_task(idx, config_dict, base_args):
 
 def main():
     # SETTINGS
-    YAML_FILE = "experiment_definitions/ansatz_tournament/tournament_4head.yml" # <--- Change this
+    YAML_FILE = "experiment_definitions/optimizer_study_2/1head_optimizer_study.yml" # <--- Change this
     WORKERS = 2                     # <--- Adjust based on RAM
     
     

@@ -8,7 +8,7 @@ os.environ['MKL_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
 os.environ['NUMEXPR_NUM_THREADS'] = '1'
-from qnn_utils import *
+from qnn_utils_spsa import *
 import yaml
 import re
 from copy import deepcopy

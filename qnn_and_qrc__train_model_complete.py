@@ -1,4 +1,4 @@
-from qnn_utils_complete import *
+from qnn_utils_spsa import *
 import yaml
 
 class FrozenQNNWrapper:
