@@ -51,13 +51,13 @@ def get_best_mappings(head_count):
         ]
     return full + reduced
 
-def build_yaml_content(is_qrc=False):
-    seeds = 30 if is_qrc else 10
-    optimizer = 'ridge' if is_qrc else 'spsa'
-    initialization = 'uniform' if is_qrc else 'identity'
-    maxiter = 1 if is_qrc else 4000
-    lr = "0.001" if is_qrc else "[0.1, 0.001]"
-    save_dir = "study_qrc" if is_qrc else "study_qnn"
+def build_yaml_content(is_qelm=False):
+    seeds = 30 if is_qelm else 10
+    optimizer = 'ridge' if is_qelm else 'spsa'
+    initialization = 'uniform' if is_qelm else 'identity'
+    maxiter = 1 if is_qelm else 4000
+    lr = "0.001" if is_qelm else "[0.1, 0.001]"
+    save_dir = "study_qelm" if is_qelm else "study_qnn"
     
     yaml_lines = []
     
@@ -106,10 +106,10 @@ def build_yaml_content(is_qrc=False):
 
 # Generate and save
 with open("study_qnn.yml", "w") as f:
-    f.write(build_yaml_content(is_qrc=False))
+    f.write(build_yaml_content(is_qelm=False))
 
-with open("study_qrc.yml", "w") as f:
-    f.write(build_yaml_content(is_qrc=True))
+with open("study_qelm.yml", "w") as f:
+    f.write(build_yaml_content(is_qelm=True))
 
 print("Created study_qnn.yml (960 experiments)")
-print("Created study_qrc.yml (2880 experiments)")
+print("Created study_qelm.yml (2880 experiments)")

@@ -30,6 +30,7 @@ def train_classical(args):
     test_dir = os.path.join(args.data, "test")
 
     x_train, y_train, x_scaler, y_scaler = prepare_dataset_from_directory(train_dir, args, fit_scalers=True)
+
     x_val, y_val, _, _ = prepare_dataset_from_directory(val_dir, args, x_scaler=x_scaler, y_scaler=y_scaler)
     x_test, y_test, _, _ = prepare_dataset_from_directory(test_dir, args, x_scaler=x_scaler, y_scaler=y_scaler)
 
@@ -118,13 +119,17 @@ if __name__ == "__main__":
     parser.add_argument('--layers', type=int, default=1)
     parser.add_argument('--maxiter', type=int, default=200)
     parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--max_batches_per_iter', type=int, default=None, help="Caps the number of batches processed per iteration pass to mirror Quantum models")
     parser.add_argument('--learning_rate', type=float, nargs='+', default=[0.05, 0.005], help="Initial and final learning rate for dynamic decay")
     parser.add_argument('--run', type=int, default=1)
     parser.add_argument('--norm', type=str2bool, default=True)
     parser.add_argument('--reconstruct_train', type=str2bool, default=False)
     parser.add_argument('--reconstruct_val', type=str2bool, default=False)
     parser.add_argument('--weights', type=str, default="[1.0, 1.0, 1.0, 1.0]")
-    parser.add_argument('--optimizer', type=str, default='spsa', choices=['spsa', 'cobyla'])
+    # Locate these lines in classical_train_model.py and add 'adam' to choices, plus scheduler items
+    parser.add_argument('--optimizer', type=str, default='spsa', choices=['spsa', 'cobyla', 'adam'])
+    parser.add_argument('--use_scheduler', type=str2bool, default=False, help="Enable ReduceLROnPlateau for Adam")
+    parser.add_argument('--scheduler_patience', type=int, default=5, help="Patience window for the LR scheduler step decay")
     parser.add_argument('--perturbation', type=float, default=0.05)
     parser.add_argument('--tolerance', type=float, default=None)
     parser.add_argument('-init', '--initialization', type=str, default='uniform', choices=['uniform', 'identity'])# uniform

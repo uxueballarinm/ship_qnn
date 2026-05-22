@@ -472,9 +472,9 @@ class WindowEncodingQNN:
         return self.qnn.forward(x_flat, q_params)
     def initialize_parameters(self, strategy, optimizer_name = 'spsa', trainable_encoding=False, num_features=0):
         scaling_weights = []
-        is_qrc = str(optimizer_name).lower() == 'ridge'
+        is_qelm = str(optimizer_name).lower() == 'ridge'
         if trainable_encoding:
-            if is_qrc: scaling_weights = [self.rng.uniform(0.1, 2.0, size=num_features)]
+            if is_qelm: scaling_weights = [self.rng.uniform(0.1, 2.0, size=num_features)]
             else: scaling_weights = [np.ones(num_features)]
         limit = np.sqrt(6 / (self.input_dim + self.output_dim))
         num_lambda = num_features if trainable_encoding else 0
@@ -791,8 +791,8 @@ def train_model(args, model, x_train, y_train, x_val, y_val, scaler=None):
         "train_history": train_hist, "val_history": val_hist,         
     }
 
-def train_qrc_ridge(args, model, x_train, y_train, x_val, y_val, alpha=1.0):
-    print(f"\n{C_BLUE}[QRC-Ridge] Solving linear readout...{C_RESET}")
+def train_qelm_ridge(args, model, x_train, y_train, x_val, y_val, alpha=1.0):
+    print(f"\n{C_BLUE}[qelm-Ridge] Solving linear readout...{C_RESET}")
     
     # 1. Initialize random quantum parameters (the reservoir)
     init_params = model.initialize_parameters(
@@ -1441,7 +1441,7 @@ def find_existing_experiment(current_args, models_root="models"):
             if weights is None:
                 continue
             
-            # History check: SPSA needs it, QRC (Ridge) does not
+            # History check: SPSA needs it, qelm (Ridge) does not
             history = data.get('train_history') or []
             if opt != 'ridge' and len(history) < 10:
                 continue

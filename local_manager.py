@@ -6,7 +6,7 @@ from joblib import Parallel, delayed
 from copy import deepcopy
 
 # IMPORTANT: Change 'main_script' to the actual name of your file (e.g., train_qnn)
-import qnn_and_qrc__train_model_complete as main_script 
+import qnn_and_qelm_train_model_complete as main_script 
 
 def str2bool(v):
     """ Helper to handle boolean strings in argparse """

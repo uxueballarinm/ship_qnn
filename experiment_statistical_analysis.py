@@ -13,6 +13,8 @@ from openpyxl.formatting.rule import CellIsRule
 from statsmodels.stats.multitest import multipletests
 import openpyxl.utils as utils
 import statsmodels.api as sm
+import patsy
+from scipy import linalg
 from statsmodels.formula.api import ols
 # 1. STYLE & FONT CONFIGURATION
 warnings.filterwarnings("ignore")
@@ -51,7 +53,7 @@ class QNNAnalyzer:
             self.log_file, self.writer = None, None
 
         self._preprocess()
-
+    
     def _preprocess(self):
         if 'map' in self.df.columns:
             self.df['map'] = self.df['map'].astype(str).str.replace(" ", "")
@@ -170,11 +172,7 @@ class QNNAnalyzer:
             sheet_name = f"BestVsRest_{metric[:20]}"
             stats_table.to_excel(self.writer, sheet_name=sheet_name)
             self.run_pairwise_analysis(clean_df, stats_table.index, metric, group_by, use_parametric)
-            
-        if self.save_enabled:
-            # Pass the consistency flag to Pairwise Analysis as well
-            self.run_pairwise_analysis(clean_df, stats_table.index, metric, group_by, use_parametric)
-
+         
         self._visualize_results(clean_df, stats_table, group_by, metric, use_parametric)
     def run_pairwise_analysis(self, data_df, ordered_indices, metric, group_by, use_parametric):
         """Generates a p-value matrix using Holm-Bonferroni adjusted values."""
@@ -273,29 +271,21 @@ class QNNAnalyzer:
         green = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         red = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
         cell_range = f"B2:{utils.get_column_letter(ws.max_column)}{ws.max_row}"
-        ws.conditional_formatting.add(cell_range, CellIsRule(operator='lessThan', formula=['0.05'], fill=green))
+        ws.conditional_formatting.add(cell_range, CellIsRule(operator='lessThan', formula=['0,05'], fill=green))
         ws.conditional_formatting.add(cell_range, CellIsRule(operator='greaterThanOrEqual', formula=['0.05'], fill=red))
     def _perform_art_interaction(self, df, factor1, factor2, metric):
-        """IMPLEMENTED: Aligned Rank Transform for Interaction (Point 3)"""
         self.logger(">>> Running Aligned Rank Transform (ART) for Interaction Analysis...")
-        
-        # 1. Alignment: To test interaction A:B, we must remove main effects A and B
-        # Y_aligned = Y - (Mean_A - GrandMean) - (Mean_B - GrandMean)
         grand_mean = df[metric].mean()
         mean_a = df.groupby(factor1)[metric].transform('mean')
         mean_b = df.groupby(factor2)[metric].transform('mean')
         
         df['art_aligned'] = df[metric] - (mean_a - grand_mean) - (mean_b - grand_mean)
-        
-        # 2. Rank the aligned data
         df['art_rank'] = stats.rankdata(df['art_aligned'])
         
-        # 3. Perform ANOVA on the ranks (Type 2 SS is robust for interaction)
         formula = f"art_rank ~ C({factor1}) * C({factor2})"
         model = ols(formula, data=df).fit()
         table = sm.stats.anova_lm(model, typ=2)
         
-        # We only care about the interaction p-value from this specific model
         inter_key = f"C({factor1}):C({factor2})"
         p_inter = table.loc[inter_key, "PR(>F)"]
         return table, p_inter
@@ -305,52 +295,59 @@ class QNNAnalyzer:
         self.df[metric] = pd.to_numeric(self.df[metric], errors='coerce')
         clean_df = self.df.dropna(subset=[metric]).copy()
         
-        # 1. Restore your Interaction Grid (Means)
+        # 1. ALWAYS run the statistical tests on the FULL dataset for complete accuracy
         pivot_mean = clean_df.pivot_table(index=factor_x, columns=factor_hue, values=metric, aggfunc='mean')
-        self.logger("\n>>> INTERACTION GRID (Means):")
-        self.logger(pivot_mean.round(5).to_string())
         
-        if self.writer:
-            grid_sheet = f"Grid_{factor_x}_{factor_hue}"[:30]
-            pivot_mean.to_excel(self.writer, sheet_name=grid_sheet)
-
-        # 2. Check Balance and Normality
         groups = [g[metric].values for n, g in clean_df.groupby([factor_x, factor_hue])]
-        norm_passes = [self.check_normality_full(g, "group") for g in groups]
+        norm_passes = [self.check_normality_full(g, "group") for g in groups if len(g) >= 3]
         pct_normal = sum(norm_passes) / len(norm_passes) if norm_passes else 0
         use_parametric = pct_normal > 0.95 
 
-        # 3. Strategy Choice: Parametric ANOVA vs. Aligned Rank Transform
         if use_parametric:
-            self.logger(f"\n>>> STRATEGY: Standard Two-Way ANOVA (Pass Rate: {pct_normal:.1%})")
             formula = f"Q('{metric}') ~ C({factor_x}) * C({factor_hue})"
             model = ols(formula, data=clean_df).fit()
             anova_table = sm.stats.anova_lm(model, typ=2)
             p_inter = anova_table.loc[f"C({factor_x}):C({factor_hue})", "PR(>F)"]
         else:
-            self.logger(f"\n>>> STRATEGY: Aligned Rank Transform (Non-Parametric) (Pass Rate: {pct_normal:.1%})")
             anova_table, p_inter = self._perform_art_interaction(clean_df, factor_x, factor_hue, metric)
 
-        # 4. Final Logging and Saving
-        self.logger(f"\n--- ANOVA/ART RESULTS ---")
-        self.logger(anova_table.round(5).to_string())
-        
         if self.writer:
-            sheet_name = f"Int_{factor_x}_{factor_hue}"[:31]
-            anova_table.to_excel(self.writer, sheet_name=sheet_name)
+            sheet_name = f"I_{factor_x[:10]}_{factor_hue[:10]}_{metric}".replace(" ", "_")
+            anova_table.reset_index().to_excel(self.writer, sheet_name=sheet_name, index=False)
 
-        if p_inter < 0.05:
-            self.logger(f"\n[!] CONCLUSION: Significant interaction detected (p={p_inter:.4e}).")
-        else:
-            self.logger(f"\n[ ] CONCLUSION: No significant interaction detected (p={p_inter:.2f}).")
+        # --- SMART PLOT FILTERING BLOCK ---
+        # Create a separate DataFrame purely for a clean visualization
+        plot_df = clean_df.copy()
+        max_options_to_plot = 15
+        
+        # Check if the primary variable (e.g., 'map') has too many variations
+        if plot_df[factor_x].nunique() > max_options_to_plot:
+            # Find the top performing categories based on the mean metric score
+            top_performers = plot_df.groupby(factor_x)[metric].mean().sort_values(ascending=False).index[:max_options_to_plot].tolist()
+            # Filter the plot data to show only these top options
+            plot_df = plot_df[plot_df[factor_x].isin(top_performers)]
+            self.logger(f"[Visual Filter] Limit reached for '{factor_x}'. Plotting top {max_options_to_plot} options to ensure readability.")
+            
+        # Check if the secondary variable has too many variations
+        if plot_df[factor_hue].nunique() > max_options_to_plot:
+            top_hues = plot_df.groupby(factor_hue)[metric].mean().sort_values(ascending=False).index[:max_options_to_plot].tolist()
+            plot_df = plot_df[plot_df[factor_hue].isin(top_hues)]
+            self.logger(f"[Visual Filter] Limit reached for '{factor_hue}'. Plotting top {max_options_to_plot} options to ensure readability.")
+        # ----------------------------------
 
-        # 5. Visualization (Using Pointplot to see line intersections clearly)
-        plt.figure(figsize=(14, 7))
-        sns.pointplot(x=factor_x, y=metric, hue=factor_hue, data=clean_df, capsize=.1, dodge=True)
-        plt.title(f"Interaction Plot: {metric} ({'Parametric' if use_parametric else 'ART'})")
+        # --- RENDER CLEAN VISUALIZATION ---
+        plt.figure(figsize=(12, 6))
+        
+        # Use the filtered plot_df instead of clean_df
+        sns.pointplot(x=factor_x, y=metric, hue=factor_hue, data=plot_df, capsize=.05, dodge=0.2)
+        
+        plt.title(f"Interaction: {metric} (Top {max_options_to_plot} Overview)\nSignificance: p = {p_inter:.4e}")
+        plt.grid(True, linestyle=":", alpha=0.6)
+        plt.xticks(rotation=15)
         plt.tight_layout()
+        
         if self.save_enabled:
-            plt.savefig(os.path.join(self.out_dir, f"int_{factor_x}_{factor_hue}.png"))
+            plt.savefig(os.path.join(self.out_dir, f"int_{factor_x}_{factor_hue}_{metric[:10].replace(' ','_')}.png"))
         plt.show()
     def _create_config_id(self):
         """Creates short IDs and saves a mapping table."""
@@ -425,31 +422,28 @@ if __name__ == "__main__":
     args = parser.parse_args()
     analyzer = QNNAnalyzer(args.file, save_enabled=args.save)
 
-    # LÓGICA INTELIGENTE:
-    # Si el usuario no define estudios, comparamos las "Config_ID" (las filas agrupadas de Excel)
     if not args.studies and not args.interactions:
         config_column = analyzer._create_config_id()
-        
-        # Usamos tu métrica principal de Power Query por defecto
-        default_metric = args.metric if args.metric else "Val Global Open R2"
-        
-        analyzer.logger(f"\n[MODO AUTOMÁTICO] Comparando configuraciones basadas en GroupKeys de Power Query.")
-        for i in default_metric:
-            analyzer.run_study(config_column, i)
-
+        default_metric = args.metric if args.metric else ["Val Global Open R2"]
+        analyzer.logger(f"\n[AUTOMATIC MODE] Running global studies across configuration sets.")
+        for m in default_metric:
+            analyzer.run_study(config_column, m)
     else:
-        # Lógica manual si se pasan argumentos (se mantiene igual)
+        # 2. Main Factor Independent Study Mode
         if args.studies:
             metrics = args.metric if args.metric else ["Val Global Open R2"]
-            if len(metrics) == 1: metrics = metrics * len(args.studies)
+            # If user provides one metric but multiple studies, extend to evaluate them all
+            if len(metrics) == 1 and len(args.studies) > 1:
+                metrics = metrics * len(args.studies)
             for s, m in zip(args.studies, metrics):
                 analyzer.run_study(s, m)
 
+        # 3. Fully Crossed Interaction Study Mode (Evaluates ALL targets across ALL pairs)
         if args.interactions:
             i_metrics = args.interaction_metrics if args.interaction_metrics else ["Val Global Open R2"]
-            if len(i_metrics) == 1: i_metrics = i_metrics * len(args.interactions)
-            for pair, m in zip(args.interactions, i_metrics):
+            for pair in args.interactions:
                 x, hue = pair.split(':')
-                analyzer.run_interaction_study(x, hue, m)
+                for m in i_metrics:
+                    analyzer.run_interaction_study(x, hue, m)
 
     analyzer.close()

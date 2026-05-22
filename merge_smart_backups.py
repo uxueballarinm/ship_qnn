@@ -43,12 +43,12 @@ def smart_merge_backups_final():
     # --- 1. SETTINGS ---
     # Simplified search dir to avoid the 'double folder' issue
     base = r"logs\experiments_systematic\correlation_study"
-    base_search = r"logs\experiments_systematic\correlation_study\study_qnn\backups"
+    base_search = r"logs\experiments_systematic\correlation_study\logs\study_qnn\backups"
     base_search_abs = get_abs_path(base_search)
     target_identity = os.path.join(base, "correlation_qnn_identity_2.xlsx")
-    target_uniform = os.path.join(base, "correlation_qelm_uniform_2.xlsx")
+    target_uniform = os.path.join(base, "correlation_qnn_identity_2.xlsx")
 
-    head_num = 2
+    head_num = 1
 
     # --- 2. FIND ALL FILES ---
     # We search from the parent folder to catch everything

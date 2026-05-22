@@ -482,9 +482,9 @@ class WindowEncodingQNN:
         return y.reshape(x.shape[0], self.horizon, self.columns)
     def initialize_parameters(self, strategy, optimizer_name = 'spsa', trainable_encoding=False, num_features=0):
         scaling_weights = []
-        is_qrc = str(optimizer_name).lower() == 'ridge'
+        is_qelm = str(optimizer_name).lower() == 'ridge'
         if trainable_encoding:
-            if is_qrc:
+            if is_qelm:
                 # Group D: Ridge uses random scaling [0.1, 2.0] for reservoir diversity
                 scaling_weights = [self.rng.uniform(0.1, 2.0, size=num_features)]
             else:
@@ -557,10 +557,10 @@ class TorchWindowQNN(nn.Module):
     def initialize_parameters(self, strategy, optimizer_name='adam', trainable_encoding=False, num_features=0):
         """Generates initial weights using the same logic as the classical WindowEncodingQNN."""
         scaling_weights = []
-        is_qrc = str(optimizer_name).lower() == 'ridge'
+        is_qelm = str(optimizer_name).lower() == 'ridge'
 
         if trainable_encoding:
-            if is_qrc:
+            if is_qelm:
                 scaling_weights = [self.rng.uniform(0.1, 2.0, size=num_features)]
             else:
                 scaling_weights = [np.ones(num_features)]
@@ -659,7 +659,10 @@ class ClassicalMultiHeadMLP(nn.Module):
 
     def forward(self, x, params=None):
         if params is not None: self.set_weights(params)
-        if isinstance(x, np.ndarray): x = torch.tensor(x, dtype=torch.float32).to(self.device)
+        if isinstance(x, np.ndarray): 
+            x = torch.tensor(x, dtype=torch.float32).to(self.device)
+        elif isinstance(x, torch.Tensor):
+            x = x.to(self.device)
 
         head_outputs = []
         for i, head in enumerate(self.heads):
@@ -822,7 +825,7 @@ class TorchMultiHeadQNN(nn.Module):
     def initialize_parameters(self, strategy, optimizer_name='adam', trainable_encoding=False, num_features=0):
         """Generates initial weights using the same logic as the SPSA/Ridge models."""
         params_list = []
-        is_qrc = str(optimizer_name).lower() == 'ridge'
+        is_qelm = str(optimizer_name).lower() == 'ridge'
 
         for i, (head, readout) in enumerate(zip(self.heads, self.readouts)):
             head_feat_count = len(self.input_indices[i])
@@ -830,7 +833,7 @@ class TorchMultiHeadQNN(nn.Module):
             # 1. Scaling Factors (λ)
             scaling = []
             if trainable_encoding:
-                if is_qrc:
+                if is_qelm:
                     scaling = [self.rng.uniform(0.1, 2.0, size=head_feat_count)]
                 else:
                     scaling = [np.ones(head_feat_count)]
@@ -1011,10 +1014,10 @@ def train_qnn_adam_gpu(args, model, x_train, y_train, x_val, y_val, y_scaler=Non
     # Increase batch_size for GPU efficiency if needed
     batch_size = getattr(args, 'batch_size', 256) 
     
-    t_x_train = torch.tensor(x_train, dtype=torch.float32)
-    t_y_train = torch.tensor(y_train, dtype=torch.float32)
-    t_x_val = torch.tensor(x_val, dtype=torch.float32)
-    t_y_val = torch.tensor(y_val, dtype=torch.float32)
+    t_x_train = torch.tensor(x_train, dtype=torch.float32).to(device)
+    t_y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
+    t_x_val = torch.tensor(x_val, dtype=torch.float32).to(device)
+    t_y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
 
     train_loader = DataLoader(TensorDataset(t_x_train, t_y_train), batch_size=batch_size, shuffle=True, pin_memory=True)
     
@@ -1095,17 +1098,20 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
     """
     Standard PyTorch training loop with Adam optimizer.
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  
     batch_size = args.batch_size if hasattr(args, 'batch_size') else 32
-    t_x_train = torch.tensor(x_train, dtype=torch.float32).to(device)
-    t_y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
-    t_x_val = torch.tensor(x_val, dtype=torch.float32).to(device)
-    t_y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
-    train_loader = DataLoader(TensorDataset(t_x_train, t_y_train), batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(TensorDataset(t_x_val, t_y_val), batch_size=batch_size, shuffle=False)
+    t_x_train = torch.tensor(x_train, dtype=torch.float32)
+    t_y_train = torch.tensor(y_train, dtype=torch.float32)
+    t_x_val = torch.tensor(x_val, dtype=torch.float32)
+    t_y_val = torch.tensor(y_val, dtype=torch.float32)
+    use_cuda = (device.type == "cuda")
+    train_loader = DataLoader(TensorDataset(t_x_train, t_y_train), batch_size=batch_size, shuffle=True, pin_memory=use_cuda)
+    val_loader = DataLoader(TensorDataset(t_x_val, t_y_val), batch_size=batch_size, shuffle=False, pin_memory=use_cuda)
     model = model.to(device)
     criterion = nn.MSELoss()
     if args.optimizer.lower() == 'adam':
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate)
+        lr_val = args.learning_rate[0] if isinstance(args.learning_rate, list) else args.learning_rate
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr_val)
     else:
         raise ValueError("Unsupported optimizer")
 
@@ -1114,16 +1120,25 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
     train_history, val_history = [], []
     patience = getattr(args, 'patience', 20)
     counter = 0
-    
+    max_batches = getattr(args, 'max_batches_per_iter', 30 if args.maxiter == 1 else None)
+    use_scheduler = getattr(args, 'use_scheduler', False)
+    scheduler = None
+    if use_scheduler:
+        sched_pat = getattr(args, 'scheduler_patience', 5)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=sched_pat, factor=0.5)
+        print(f"[Scheduler] Initialized ReduceLROnPlateau with patience={sched_pat}")
+
     print(f"\n[Training] Starting Classical Optimization (Adam) on {device}...")
     start_time = time.time()
     for epoch in range(args.maxiter):
         model.train()
         epoch_loss = 0
+        batches_processed = 0
         
         for x_batch, y_batch in train_loader:
-
-            x_batch, y_batch = x_batch.to(device), y_batch.to(device)
+            if max_batches and batches_processed >= max_batches:
+                break
+            x_batch, y_batch = x_batch.to(device, non_blocking=True), y_batch.to(device, non_blocking=True)           
             preds = model(x_batch)
             loss = criterion(preds, y_batch) # Forward
             
@@ -1131,8 +1146,9 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
 
             
             epoch_loss += loss.item()
-            
-        avg_train_loss = epoch_loss / len(train_loader)
+            batches_processed += 1
+
+        avg_train_loss = epoch_loss / batches_processed if batches_processed > 0 else 0
         train_history.append(avg_train_loss)
 
         model.eval()
@@ -1141,6 +1157,7 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         num_targets = y_val.shape[-1]
         with torch.no_grad():
             for x_v, y_v in val_loader:
+                x_v, y_v = x_v.to(device, non_blocking=True), y_v.to(device, non_blocking=True)
                 val_preds = model(x_v)
                 v_p_np = val_preds.cpu().numpy().reshape(-1, args.horizon, num_targets)
                 v_y_np = y_v.cpu().numpy().reshape(-1, args.horizon, num_targets)                
@@ -1150,8 +1167,9 @@ def train_classical_model(args, model, x_train, y_train, x_val, y_val, y_scaler 
         
         avg_val_loss = val_loss_accum / total_samples
         val_history.append(avg_val_loss)
-
-        if (epoch + 1) % 10 == 0:
+        if scheduler is not None:
+            scheduler.step(avg_val_loss)
+        if (epoch + 1) % 10 == 0 or args.maxiter == 1:
             print(f"[Training] Epoch {epoch+1:4d} | Train MSE: {avg_train_loss:.6f} | Val MSE: {avg_val_loss:.6f}")
 
         if avg_val_loss < best_val_loss:
